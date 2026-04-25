@@ -16,7 +16,7 @@ public class CatalogController {
         this.itemService = itemService;
     }
 
-    @GetMapping("/")
+    @GetMapping({"/", "/items"})
     public String getCatalog(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String sort,
@@ -25,12 +25,15 @@ public class CatalogController {
             Model model
     ) {
         CatalogPage catalogPage = itemService.findCatalog(search, sort, pageNumber, pageSize);
+        fillModel(model, catalogPage);
 
+        return "items";
+    }
+
+    private void fillModel(Model model, CatalogPage catalogPage) {
         model.addAttribute("items", catalogPage.items());
         model.addAttribute("search", catalogPage.search());
         model.addAttribute("sort", catalogPage.sort());
         model.addAttribute("paging", catalogPage.paging());
-
-        return "items";
     }
 }

@@ -12,6 +12,7 @@ import ru.yandex.practicum.mymarket.service.ItemService;
 
 import java.util.List;
 
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -55,5 +56,30 @@ class CatalogControllerTest {
                 .andExpect(model().attribute("paging", catalogPage.paging()));
 
         verify(itemService).findCatalog("товар", "ALPHA", 1, 5);
+    }
+
+    @Test
+    void shouldRenderItemsCatalogPage() throws Exception {
+        CatalogPage catalogPage = new CatalogPage(
+                List.of(List.of(
+                        new ItemDto(1, "Товар", "Описание", "images/item.jpg", 100, 0),
+                        ItemDto.placeholder(),
+                        ItemDto.placeholder()
+                )),
+                "",
+                "NO",
+                new Paging(5, 1, false, false)
+        );
+        when(itemService.findCatalog(null, null, null, null)).thenReturn(catalogPage);
+
+        mockMvc.perform(get("/items"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("items"))
+                .andExpect(model().attribute("items", catalogPage.items()))
+                .andExpect(model().attribute("search", ""))
+                .andExpect(model().attribute("sort", "NO"))
+                .andExpect(model().attribute("paging", catalogPage.paging()));
+
+        verify(itemService, times(1)).findCatalog(null, null, null, null);
     }
 }

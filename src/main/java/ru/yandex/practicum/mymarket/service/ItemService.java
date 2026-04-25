@@ -35,6 +35,13 @@ public class ItemService {
     }
 
     @Transactional(readOnly = true)
+    public ItemDto findById(long id) {
+        return itemRepository.findById(id)
+                .map(this::toDto)
+                .orElse(null);
+    }
+
+    @Transactional(readOnly = true)
     public CatalogPage findCatalog(String search, String sort, Integer pageNumber, Integer pageSize) {
         String normalizedSearch = normalizeSearch(search);
         ItemSort itemSort = ItemSort.from(sort);

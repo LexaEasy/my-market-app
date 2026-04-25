@@ -82,4 +82,27 @@ class CatalogControllerTest {
 
         verify(itemService, times(1)).findCatalog(null, null, null, null);
     }
+
+    @Test
+    void shouldRenderItemPage() throws Exception {
+        ItemDto item = new ItemDto(1, "Товар", "Описание", "images/item.jpg", 100, 0);
+        when(itemService.findById(1)).thenReturn(item);
+
+        mockMvc.perform(get("/items/1"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("item"))
+                .andExpect(model().attribute("item", item));
+
+        verify(itemService).findById(1);
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenItemDoesNotExist() throws Exception {
+        when(itemService.findById(404)).thenReturn(null);
+
+        mockMvc.perform(get("/items/404"))
+                .andExpect(status().isNotFound());
+
+        verify(itemService).findById(404);
+    }
 }

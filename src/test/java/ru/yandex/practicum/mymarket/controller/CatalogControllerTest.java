@@ -1,0 +1,59 @@
+package ru.yandex.practicum.mymarket.controller;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+import ru.yandex.practicum.mymarket.dto.CatalogPage;
+import ru.yandex.practicum.mymarket.dto.ItemDto;
+import ru.yandex.practicum.mymarket.dto.Paging;
+import ru.yandex.practicum.mymarket.service.ItemService;
+
+import java.util.List;
+
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
+
+@WebMvcTest(CatalogController.class)
+class CatalogControllerTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockitoBean
+    private ItemService itemService;
+
+    @Test
+    void shouldRenderCatalogPage() throws Exception {
+        CatalogPage catalogPage = new CatalogPage(
+                List.of(List.of(
+                        new ItemDto(1, "Товар", "Описание", "images/item.jpg", 100, 0),
+                        ItemDto.placeholder(),
+                        ItemDto.placeholder()
+                )),
+                "товар",
+                "ALPHA",
+                new Paging(5, 1, false, false)
+        );
+        when(itemService.findCatalog("товар", "ALPHA", 1, 5)).thenReturn(catalogPage);
+
+        mockMvc.perform(get("/")
+                        .param("search", "товар")
+                        .param("sort", "ALPHA")
+                        .param("pageNumber", "1")
+                        .param("pageSize", "5"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("items"))
+                .andExpect(model().attribute("items", catalogPage.items()))
+                .andExpect(model().attribute("search", "товар"))
+                .andExpect(model().attribute("sort", "ALPHA"))
+                .andExpect(model().attribute("paging", catalogPage.paging()));
+
+        verify(itemService).findCatalog("товар", "ALPHA", 1, 5);
+    }
+}

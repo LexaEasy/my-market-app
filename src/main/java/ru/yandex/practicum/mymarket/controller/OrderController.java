@@ -11,6 +11,8 @@ import org.springframework.web.server.ResponseStatusException;
 import ru.yandex.practicum.mymarket.dto.OrderDto;
 import ru.yandex.practicum.mymarket.service.OrderService;
 
+import java.util.List;
+
 @Controller
 public class OrderController {
 
@@ -28,6 +30,15 @@ public class OrderController {
         }
 
         return "redirect:/orders/" + orderId + "?newOrder=true";
+    }
+
+    @GetMapping("/orders")
+    public String getOrders(Model model) {
+        List<OrderDto> orders = orderService.findAll();
+
+        model.addAttribute("orders", orders);
+
+        return "orders";
     }
 
     @GetMapping("/orders/{id}")

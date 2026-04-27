@@ -75,6 +75,21 @@ class OrderServiceTest {
     }
 
     @Test
+    void shouldFindAllOrders() {
+        Item item = itemRepository.save(new Item("Товар", "Описание", "images/item.jpg", 100));
+        cartService.updateItemCount(item.getId(), CartAction.PLUS);
+        long orderId = orderService.buy();
+
+        assertThat(orderService.findAll())
+                .singleElement()
+                .satisfies(order -> {
+                    assertThat(order.id()).isEqualTo(orderId);
+                    assertThat(order.totalSum()).isEqualTo(100);
+                    assertThat(order.items()).hasSize(1);
+                });
+    }
+
+    @Test
     void shouldReturnMinusOneWhenCartIsEmpty() {
         long orderId = orderService.buy();
 

@@ -71,6 +71,23 @@ class OrderControllerTest {
     }
 
     @Test
+    void shouldRenderOrdersPage() throws Exception {
+        List<OrderDto> orders = List.of(new OrderDto(
+                10,
+                List.of(new ItemDto(-1, "Товар", "", "", 100, 2)),
+                200
+        ));
+        when(orderService.findAll()).thenReturn(orders);
+
+        mockMvc.perform(get("/orders"))
+                .andExpect(status().isOk())
+                .andExpect(view().name("orders"))
+                .andExpect(model().attribute("orders", orders));
+
+        verify(orderService).findAll();
+    }
+
+    @Test
     void shouldReturnNotFoundWhenOrderDoesNotExist() throws Exception {
         when(orderService.findById(404)).thenReturn(null);
 

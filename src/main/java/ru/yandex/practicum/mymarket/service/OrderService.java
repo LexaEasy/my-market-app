@@ -45,6 +45,13 @@ public class OrderService {
                 .orElse(null);
     }
 
+    @Transactional(readOnly = true)
+    public List<OrderDto> findAll() {
+        return orderRepository.findAllByOrderByIdAsc().stream()
+                .map(this::toDto)
+                .toList();
+    }
+
     private OrderDto toDto(Order order) {
         List<ItemDto> items = order.getItems().stream()
                 .map(this::toItemDto)

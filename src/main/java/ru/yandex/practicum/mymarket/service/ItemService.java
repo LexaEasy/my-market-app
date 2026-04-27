@@ -11,10 +11,13 @@ import ru.yandex.practicum.mymarket.dto.ItemDto;
 import ru.yandex.practicum.mymarket.dto.Paging;
 import ru.yandex.practicum.mymarket.model.Item;
 import ru.yandex.practicum.mymarket.model.ItemSort;
+import ru.yandex.practicum.mymarket.repository.CartItemRepository;
 import ru.yandex.practicum.mymarket.repository.ItemRepository;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class ItemService {
@@ -24,9 +27,11 @@ public class ItemService {
     private static final int ITEMS_PER_ROW = 3;
 
     private final ItemRepository itemRepository;
+    private final CartItemRepository cartItemRepository;
 
-    public ItemService(ItemRepository itemRepository) {
+    public ItemService(ItemRepository itemRepository, CartItemRepository cartItemRepository) {
         this.itemRepository = itemRepository;
+        this.cartItemRepository = cartItemRepository;
     }
 
     @Transactional(readOnly = true)
@@ -37,7 +42,7 @@ public class ItemService {
     @Transactional(readOnly = true)
     public ItemDto findById(long id) {
         return itemRepository.findById(id)
-                .map(this::toDto)
+                .map(item -> toDto(item, findCount(item.getId())))
                 .orElse(null);
     }
 
@@ -61,8 +66,11 @@ public class ItemService {
                 pageable
         );
 
+        List<Item> items = page.getContent();
+        Map<Long, Integer> counts = findCounts(items);
+
         return new CatalogPage(
-                toRows(page.getContent()),
+                toRows(items, counts),
                 normalizedSearch,
                 itemSort.name(),
                 new Paging(normalizedPageSize, normalizedPageNumber, page.hasPrevious(), page.hasNext())
@@ -95,13 +103,13 @@ public class ItemService {
         };
     }
 
-    private List<List<ItemDto>> toRows(List<Item> items) {
+    private List<List<ItemDto>> toRows(List<Item> items, Map<Long, Integer> counts) {
         List<List<ItemDto>> rows = new ArrayList<>();
         for (int index = 0; index < items.size(); index += ITEMS_PER_ROW) {
             List<ItemDto> row = new ArrayList<>();
             items.subList(index, Math.min(index + ITEMS_PER_ROW, items.size()))
                     .stream()
-                    .map(this::toDto)
+                    .map(item -> toDto(item, counts.getOrDefault(item.getId(), 0)))
                     .forEach(row::add);
             while (row.size() < ITEMS_PER_ROW) {
                 row.add(ItemDto.placeholder());
@@ -111,14 +119,32 @@ public class ItemService {
         return rows;
     }
 
-    private ItemDto toDto(Item item) {
+    private Map<Long, Integer> findCounts(List<Item> items) {
+        List<Long> itemIds = items.stream()
+                .map(Item::getId)
+                .toList();
+        if (itemIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return cartItemRepository.findAllByItemIdIn(itemIds).stream()
+                .collect(Collectors.toMap(cartItem -> cartItem.getItem().getId(), cartItem -> cartItem.getQuantity()));
+    }
+
+    private int findCount(long itemId) {
+        return cartItemRepository.findByItemId(itemId)
+                .map(cartItem -> cartItem.getQuantity())
+                .orElse(0);
+    }
+
+    private ItemDto toDto(Item item, int count) {
         return new ItemDto(
                 item.getId(),
                 item.getTitle(),
                 item.getDescription(),
                 item.getImgPath(),
                 item.getPrice(),
-                0
+                count
         );
     }
 }

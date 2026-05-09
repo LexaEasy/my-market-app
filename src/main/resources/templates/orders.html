@@ -16,8 +16,8 @@
                     <h2>
                         <span class="badge text-bg-success">Витрина магазина</span>
                     </h2>
-                    <a href="/cart/items" class="btn btn-secondary bi bi-cart4 ms-auto"> Корзина</a>
-                    <a href="/items" class="btn btn-secondary bi bi-arrow-left-square"> Главная</a>
+                    <a th:href="@{/cart/items}" class="btn btn-secondary bi bi-cart4 ms-auto"> Корзина</a>
+                    <a th:href="@{/items}" class="btn btn-secondary bi bi-arrow-left-square"> Главная</a>
                 </div>
             </div>
         </div>
@@ -25,7 +25,7 @@
             <div class="col">
                 <div class="card">
                     <div class="card-header">
-                        <a th:text="${'Заказ №'+order.id()}" th:href="${'/orders/'+order.id()}"></a>
+                        <a th:text="${'Заказ №'+order.id()}" th:href="@{/orders/{id}(id=${order.id()})}"></a>
                     </div>
                     <ul class="list-group list-group-flush" th:each="item : ${order.items()}">
                         <li class="list-group-item" th:text="${item.title()+' ('+item.count()+' шт.) '+(item.price()*item.count())+' руб.'}"/>

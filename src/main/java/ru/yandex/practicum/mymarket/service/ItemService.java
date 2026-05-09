@@ -1,22 +1,23 @@
 package ru.yandex.practicum.mymarket.service;
 
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.dto.CatalogPage;
 import ru.yandex.practicum.mymarket.dto.ItemDto;
 import ru.yandex.practicum.mymarket.dto.Paging;
+import ru.yandex.practicum.mymarket.model.CartItem;
 import ru.yandex.practicum.mymarket.model.Item;
 import ru.yandex.practicum.mymarket.model.ItemSort;
 import ru.yandex.practicum.mymarket.repository.CartItemRepository;
 import ru.yandex.practicum.mymarket.repository.ItemRepository;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 @Service
@@ -35,46 +36,56 @@ public class ItemService {
     }
 
     @Transactional(readOnly = true)
-    public List<Item> findAll() {
+    public Flux<Item> findAll() {
         return itemRepository.findAll();
     }
 
     @Transactional(readOnly = true)
-    public ItemDto findById(long id) {
+    public Mono<ItemDto> findById(long id) {
         return itemRepository.findById(id)
-                .map(item -> toDto(item, findCount(item.getId())))
-                .orElse(null);
+                .flatMap(item -> findCount(item.getId()).map(count -> toDto(item, count)));
     }
 
     @Transactional(readOnly = true)
-    public CatalogPage findCatalog(String search, String sort, Integer pageNumber, Integer pageSize) {
+    public Mono<CatalogPage> findCatalog(String search, String sort, Integer pageNumber, Integer pageSize) {
         String normalizedSearch = normalizeSearch(search);
         ItemSort itemSort = ItemSort.from(sort);
         int normalizedPageNumber = normalizePageNumber(pageNumber);
         int normalizedPageSize = normalizePageSize(pageSize);
-        Pageable pageable = PageRequest.of(
-                normalizedPageNumber - 1,
-                normalizedPageSize,
-                resolveSort(itemSort)
-        );
 
-        Page<Item> page = normalizedSearch.isBlank()
-                ? itemRepository.findAll(pageable)
-                : itemRepository.findByTitleContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
-                normalizedSearch,
-                normalizedSearch,
-                pageable
-        );
+        return itemRepository.findAll()
+                .filter(matchesSearch(normalizedSearch))
+                .sort(resolveComparator(itemSort))
+                .collectList()
+                .flatMap(items -> buildCatalogPage(
+                        items,
+                        normalizedSearch,
+                        itemSort,
+                        normalizedPageNumber,
+                        normalizedPageSize
+                ));
+    }
 
-        List<Item> items = page.getContent();
-        Map<Long, Integer> counts = findCounts(items);
+    private Mono<CatalogPage> buildCatalogPage(
+            List<Item> allItems,
+            String search,
+            ItemSort sort,
+            int pageNumber,
+            int pageSize
+    ) {
+        int fromIndex = Math.min((pageNumber - 1) * pageSize, allItems.size());
+        int toIndex = Math.min(fromIndex + pageSize, allItems.size());
+        List<Item> pageItems = allItems.subList(fromIndex, toIndex);
+        boolean hasPrevious = pageNumber > 1;
+        boolean hasNext = toIndex < allItems.size();
 
-        return new CatalogPage(
-                toRows(items, counts),
-                normalizedSearch,
-                itemSort.name(),
-                new Paging(normalizedPageSize, normalizedPageNumber, page.hasPrevious(), page.hasNext())
-        );
+        return findCounts(pageItems)
+                .map(counts -> new CatalogPage(
+                        toRows(pageItems, counts),
+                        search,
+                        sort.name(),
+                        new Paging(pageSize, pageNumber, hasPrevious, hasNext)
+                ));
     }
 
     private String normalizeSearch(String search) {
@@ -95,11 +106,21 @@ public class ItemService {
         return pageSize;
     }
 
-    private Sort resolveSort(ItemSort sort) {
+    private Predicate<Item> matchesSearch(String search) {
+        if (search.isBlank()) {
+            return item -> true;
+        }
+
+        String lowerCaseSearch = search.toLowerCase();
+        return item -> item.getTitle().toLowerCase().contains(lowerCaseSearch)
+                || item.getDescription().toLowerCase().contains(lowerCaseSearch);
+    }
+
+    private Comparator<Item> resolveComparator(ItemSort sort) {
         return switch (sort) {
-            case ALPHA -> Sort.by(Sort.Direction.ASC, "title");
-            case PRICE -> Sort.by(Sort.Direction.ASC, "price");
-            case NO -> Sort.unsorted();
+            case ALPHA -> Comparator.comparing(Item::getTitle, String.CASE_INSENSITIVE_ORDER);
+            case PRICE -> Comparator.comparingLong(Item::getPrice);
+            case NO -> Comparator.comparing(Item::getId);
         };
     }
 
@@ -119,22 +140,22 @@ public class ItemService {
         return rows;
     }
 
-    private Map<Long, Integer> findCounts(List<Item> items) {
+    private Mono<Map<Long, Integer>> findCounts(List<Item> items) {
         List<Long> itemIds = items.stream()
                 .map(Item::getId)
                 .toList();
         if (itemIds.isEmpty()) {
-            return Map.of();
+            return Mono.just(Map.of());
         }
 
-        return cartItemRepository.findAllByItemIdIn(itemIds).stream()
-                .collect(Collectors.toMap(cartItem -> cartItem.getItem().getId(), cartItem -> cartItem.getQuantity()));
+        return cartItemRepository.findAllByItemIdIn(itemIds)
+                .collect(Collectors.toMap(CartItem::getItemId, CartItem::getQuantity));
     }
 
-    private int findCount(long itemId) {
+    private Mono<Integer> findCount(long itemId) {
         return cartItemRepository.findByItemId(itemId)
                 .map(cartItem -> cartItem.getQuantity())
-                .orElse(0);
+                .defaultIfEmpty(0);
     }
 
     private ItemDto toDto(Item item, int count) {
@@ -147,4 +168,5 @@ public class ItemService {
                 count
         );
     }
+
 }

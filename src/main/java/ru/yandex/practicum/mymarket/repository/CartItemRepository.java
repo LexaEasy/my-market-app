@@ -1,16 +1,17 @@
 package ru.yandex.practicum.mymarket.repository;
 
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.reactive.ReactiveCrudRepository;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.model.CartItem;
 
-import java.util.List;
-import java.util.Optional;
+import java.util.Collection;
 
-public interface CartItemRepository extends JpaRepository<CartItem, Long> {
+public interface CartItemRepository extends ReactiveCrudRepository<CartItem, Long> {
 
-    Optional<CartItem> findByItemId(long itemId);
+    Mono<CartItem> findByItemId(long itemId);
 
-    List<CartItem> findAllByItemIdIn(List<Long> itemIds);
+    Flux<CartItem> findAllByItemIdIn(Collection<Long> itemIds);
 
-    List<CartItem> findAllByOrderByItemIdAsc();
+    Flux<CartItem> findAllByOrderByItemIdAsc();
 }

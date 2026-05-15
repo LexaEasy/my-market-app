@@ -1,19 +1,22 @@
 package ru.yandex.practicum.mymarket.service;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.data.r2dbc.DataR2dbcTest;
 import org.springframework.context.annotation.Import;
-import ru.yandex.practicum.mymarket.dto.OrderDto;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 import ru.yandex.practicum.mymarket.model.CartAction;
 import ru.yandex.practicum.mymarket.model.Item;
 import ru.yandex.practicum.mymarket.repository.CartItemRepository;
 import ru.yandex.practicum.mymarket.repository.ItemRepository;
+import ru.yandex.practicum.mymarket.repository.OrderItemRepository;
 import ru.yandex.practicum.mymarket.repository.OrderRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DataJpaTest
+@DataR2dbcTest
 @Import({CartService.class, OrderService.class})
 class OrderServiceTest {
 
@@ -32,68 +35,94 @@ class OrderServiceTest {
     @Autowired
     private OrderRepository orderRepository;
 
+    @Autowired
+    private OrderItemRepository orderItemRepository;
+
+    @BeforeEach
+    void setUp() {
+        StepVerifier.create(orderItemRepository.deleteAll()
+                        .then(orderRepository.deleteAll())
+                        .then(cartItemRepository.deleteAll()))
+                .verifyComplete();
+    }
+
     @Test
     void shouldCreateOrderAndClearCart() {
-        Item item = itemRepository.save(new Item("Товар", "Описание", "images/item.jpg", 100));
-        cartService.updateItemCount(item.getId(), CartAction.PLUS);
-        cartService.updateItemCount(item.getId(), CartAction.PLUS);
-
-        long orderId = orderService.buy();
-
-        assertThat(orderId).isPositive();
-        assertThat(cartItemRepository.findAll()).isEmpty();
-        assertThat(orderRepository.findById(orderId))
-                .isPresent()
-                .get()
-                .satisfies(order -> assertThat(order.getItems())
-                        .singleElement()
-                        .satisfies(orderItem -> {
-                            assertThat(orderItem.getTitle()).isEqualTo("Товар");
-                            assertThat(orderItem.getPrice()).isEqualTo(100);
-                            assertThat(orderItem.getQuantity()).isEqualTo(2);
-                        }));
+        StepVerifier.create(findSeededItem()
+                        .flatMap(item -> cartService.updateItemCount(item.getId(), CartAction.PLUS)
+                                .then(cartService.updateItemCount(item.getId(), CartAction.PLUS))
+                                .then(orderService.buy()))
+                        .flatMap(orderId -> Mono.zip(
+                                Mono.just(orderId),
+                                cartItemRepository.findAll().collectList(),
+                                orderRepository.findById(orderId),
+                                orderItemRepository.findAllByOrderIdOrderByIdAsc(orderId).collectList()
+                        )))
+                .assertNext(result -> {
+                    assertThat(result.getT1()).isPositive();
+                    assertThat(result.getT2()).isEmpty();
+                    assertThat(result.getT3().getId()).isEqualTo(result.getT1());
+                    assertThat(result.getT4())
+                            .singleElement()
+                            .satisfies(orderItem -> {
+                                assertThat(orderItem.getTitle()).isEqualTo("Футбольный мяч");
+                                assertThat(orderItem.getPrice()).isEqualTo(1490);
+                                assertThat(orderItem.getQuantity()).isEqualTo(2);
+                            });
+                })
+                .verifyComplete();
     }
 
     @Test
     void shouldFindOrderDtoById() {
-        Item item = itemRepository.save(new Item("Товар", "Описание", "images/item.jpg", 100));
-        cartService.updateItemCount(item.getId(), CartAction.PLUS);
-        cartService.updateItemCount(item.getId(), CartAction.PLUS);
-        long orderId = orderService.buy();
-
-        OrderDto order = orderService.findById(orderId);
-
-        assertThat(order.id()).isEqualTo(orderId);
-        assertThat(order.totalSum()).isEqualTo(200);
-        assertThat(order.items())
-                .singleElement()
-                .satisfies(orderItem -> {
-                    assertThat(orderItem.title()).isEqualTo("Товар");
-                    assertThat(orderItem.price()).isEqualTo(100);
-                    assertThat(orderItem.count()).isEqualTo(2);
-                });
+        StepVerifier.create(findSeededItem()
+                        .flatMap(item -> cartService.updateItemCount(item.getId(), CartAction.PLUS)
+                                .then(cartService.updateItemCount(item.getId(), CartAction.PLUS))
+                                .then(orderService.buy()))
+                        .flatMap(orderService::findById))
+                .assertNext(order -> {
+                    assertThat(order.totalSum()).isEqualTo(2980);
+                    assertThat(order.items())
+                            .singleElement()
+                            .satisfies(orderItem -> {
+                                assertThat(orderItem.title()).isEqualTo("Футбольный мяч");
+                                assertThat(orderItem.price()).isEqualTo(1490);
+                                assertThat(orderItem.count()).isEqualTo(2);
+                            });
+                })
+                .verifyComplete();
     }
 
     @Test
     void shouldFindAllOrders() {
-        Item item = itemRepository.save(new Item("Товар", "Описание", "images/item.jpg", 100));
-        cartService.updateItemCount(item.getId(), CartAction.PLUS);
-        long orderId = orderService.buy();
-
-        assertThat(orderService.findAll())
-                .singleElement()
-                .satisfies(order -> {
-                    assertThat(order.id()).isEqualTo(orderId);
-                    assertThat(order.totalSum()).isEqualTo(100);
+        StepVerifier.create(findSeededItem()
+                        .flatMap(item -> cartService.updateItemCount(item.getId(), CartAction.PLUS)
+                                .then(orderService.buy()))
+                        .flatMapMany(orderId -> orderService.findAll()))
+                .assertNext(order -> {
+                    assertThat(order.totalSum()).isEqualTo(1490);
                     assertThat(order.items()).hasSize(1);
-                });
+                })
+                .verifyComplete();
     }
 
     @Test
     void shouldReturnMinusOneWhenCartIsEmpty() {
-        long orderId = orderService.buy();
+        StepVerifier.create(orderService.buy()
+                        .flatMap(orderId -> orderRepository.findAll()
+                                .collectList()
+                                .map(orders -> new EmptyCartResult(orderId, orders.size()))))
+                .assertNext(result -> {
+                    assertThat(result.orderId()).isEqualTo(-1);
+                    assertThat(result.orderCount()).isZero();
+                })
+                .verifyComplete();
+    }
 
-        assertThat(orderId).isEqualTo(-1);
-        assertThat(orderRepository.findAll()).isEmpty();
+    private Mono<Item> findSeededItem() {
+        return itemRepository.findById(1L);
+    }
+
+    private record EmptyCartResult(long orderId, int orderCount) {
     }
 }

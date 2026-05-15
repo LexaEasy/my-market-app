@@ -1,10 +1,12 @@
 package ru.yandex.practicum.mymarket.service;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.data.r2dbc.DataR2dbcTest;
 import org.springframework.context.annotation.Import;
-import ru.yandex.practicum.mymarket.dto.CartPage;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 import ru.yandex.practicum.mymarket.model.CartAction;
 import ru.yandex.practicum.mymarket.model.Item;
 import ru.yandex.practicum.mymarket.repository.CartItemRepository;
@@ -12,7 +14,7 @@ import ru.yandex.practicum.mymarket.repository.ItemRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DataJpaTest
+@DataR2dbcTest
 @Import(CartService.class)
 class CartServiceTest {
 
@@ -25,45 +27,50 @@ class CartServiceTest {
     @Autowired
     private ItemRepository itemRepository;
 
+    @BeforeEach
+    void setUp() {
+        StepVerifier.create(cartItemRepository.deleteAll())
+                .verifyComplete();
+    }
+
     @Test
     void shouldIncreaseItemCount() {
-        Item item = itemRepository.save(new Item("Товар", "Описание", "images/item.jpg", 100));
-
-        cartService.updateItemCount(item.getId(), CartAction.PLUS);
-        cartService.updateItemCount(item.getId(), CartAction.PLUS);
-
-        assertThat(cartItemRepository.findByItemId(item.getId()))
-                .isPresent()
-                .get()
-                .extracting(cartItem -> cartItem.getQuantity())
-                .isEqualTo(2);
+        StepVerifier.create(findSeededItem()
+                        .flatMap(item -> cartService.updateItemCount(item.getId(), CartAction.PLUS)
+                                .then(cartService.updateItemCount(item.getId(), CartAction.PLUS))
+                                .then(cartItemRepository.findByItemId(item.getId()))))
+                .assertNext(cartItem -> assertThat(cartItem.getQuantity()).isEqualTo(2))
+                .verifyComplete();
     }
 
     @Test
     void shouldRemoveCartItemWhenCountBecomesZero() {
-        Item item = itemRepository.save(new Item("Товар", "Описание", "images/item.jpg", 100));
-
-        cartService.updateItemCount(item.getId(), CartAction.PLUS);
-        cartService.updateItemCount(item.getId(), CartAction.MINUS);
-
-        assertThat(cartItemRepository.findByItemId(item.getId())).isEmpty();
+        StepVerifier.create(findSeededItem()
+                        .flatMap(item -> cartService.updateItemCount(item.getId(), CartAction.PLUS)
+                                .then(cartService.updateItemCount(item.getId(), CartAction.MINUS))
+                                .then(cartItemRepository.findByItemId(item.getId()))))
+                .verifyComplete();
     }
 
     @Test
     void shouldReturnCartPageWithTotal() {
-        Item item = itemRepository.save(new Item("Товар", "Описание", "images/item.jpg", 100));
-        cartService.updateItemCount(item.getId(), CartAction.PLUS);
-        cartService.updateItemCount(item.getId(), CartAction.PLUS);
+        StepVerifier.create(findSeededItem()
+                        .flatMap(item -> cartService.updateItemCount(item.getId(), CartAction.PLUS)
+                                .then(cartService.updateItemCount(item.getId(), CartAction.PLUS))
+                                .then(cartService.findCart())))
+                .assertNext(cartPage -> {
+                    assertThat(cartPage.total()).isEqualTo(2980);
+                    assertThat(cartPage.items())
+                            .singleElement()
+                            .satisfies(cartItem -> {
+                                assertThat(cartItem.count()).isEqualTo(2);
+                                assertThat(cartItem.price()).isEqualTo(1490);
+                            });
+                })
+                .verifyComplete();
+    }
 
-        CartPage cartPage = cartService.findCart();
-
-        assertThat(cartPage.total()).isEqualTo(200);
-        assertThat(cartPage.items())
-                .singleElement()
-                .satisfies(cartItem -> {
-                    assertThat(cartItem.id()).isEqualTo(item.getId());
-                    assertThat(cartItem.count()).isEqualTo(2);
-                    assertThat(cartItem.price()).isEqualTo(100);
-                });
+    private Mono<Item> findSeededItem() {
+        return itemRepository.findById(1L);
     }
 }

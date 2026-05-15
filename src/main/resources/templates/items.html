@@ -18,8 +18,8 @@
                     <h2>
                         <span class="badge text-bg-success">Витрина магазина</span>
                     </h2>
-                    <a href="/orders" class="btn btn-secondary ms-auto bi bi-file-earmark-text"> Заказы</a>
-                    <a href="/cart/items" class="btn btn-secondary bi bi-cart4"> Корзина</a>
+                    <a th:href="@{/orders}" class="btn btn-secondary ms-auto bi bi-file-earmark-text"> Заказы</a>
+                    <a th:href="@{/cart/items}" class="btn btn-secondary bi bi-cart4"> Корзина</a>
                 </div>
             </div>
         </div>
@@ -53,7 +53,7 @@
         <div class="row p-2" th:each="itemsRow : ${items}">
             <div class="col" th:each="item : ${itemsRow}">
                 <div class="card" th:if="${item.id() != -1}">
-                    <a th:href="${'/items/'+item.id()}">
+                    <a th:href="@{/items/{id}(id=${item.id()})}">
                         <img th:src="${'/'+item.imgPath()}" class="card-img-top" alt="Нет изображения">
                     </a>
                     <div class="card-body">

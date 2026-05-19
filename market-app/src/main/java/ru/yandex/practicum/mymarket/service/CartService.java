@@ -7,6 +7,7 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.dto.CartPage;
 import ru.yandex.practicum.mymarket.dto.ItemDto;
+import ru.yandex.practicum.mymarket.dto.PaymentAvailability;
 import ru.yandex.practicum.mymarket.model.CartAction;
 import ru.yandex.practicum.mymarket.model.CartItem;
 import ru.yandex.practicum.mymarket.model.Item;
@@ -20,10 +21,16 @@ public class CartService {
 
     private final CartItemRepository cartItemRepository;
     private final ItemRepository itemRepository;
+    private final PaymentClientService paymentClientService;
 
-    public CartService(CartItemRepository cartItemRepository, ItemRepository itemRepository) {
+    public CartService(
+            CartItemRepository cartItemRepository,
+            ItemRepository itemRepository,
+            PaymentClientService paymentClientService
+    ) {
         this.cartItemRepository = cartItemRepository;
         this.itemRepository = itemRepository;
+        this.paymentClientService = paymentClientService;
     }
 
     @Transactional(readOnly = true)
@@ -31,7 +38,7 @@ public class CartService {
         return cartItemRepository.findAllByOrderByItemIdAsc()
                 .flatMap(this::toDto)
                 .collectList()
-                .map(this::toCartPage);
+                .flatMap(this::toCartPage);
     }
 
     @Transactional
@@ -86,11 +93,26 @@ public class CartService {
                 ));
     }
 
-    private CartPage toCartPage(List<ItemDto> items) {
+    private Mono<CartPage> toCartPage(List<ItemDto> items) {
         long total = items.stream()
                 .mapToLong(item -> item.price() * item.count())
                 .sum();
 
-        return new CartPage(items, total);
+        if (items.isEmpty()) {
+            return Mono.just(new CartPage(items, total));
+        }
+
+        return paymentClientService.getBalance()
+                .map(payment -> toCartPage(items, total, payment));
+    }
+
+    private CartPage toCartPage(List<ItemDto> items, long total, PaymentAvailability payment) {
+        if (!payment.available()) {
+            return new CartPage(items, total, false, payment.balance(), false, payment.message());
+        }
+
+        boolean purchaseAvailable = payment.balance() >= total;
+        String message = purchaseAvailable ? null : "Недостаточно средств для оформления заказа";
+        return new CartPage(items, total, true, payment.balance(), purchaseAvailable, message);
     }
 }

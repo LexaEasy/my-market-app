@@ -4,7 +4,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.yandex.practicum.mymarket.dto.CheckoutResult;
 import ru.yandex.practicum.mymarket.dto.ItemDto;
+import ru.yandex.practicum.mymarket.dto.OrderPaymentResult;
 import ru.yandex.practicum.mymarket.dto.OrderDto;
 import ru.yandex.practicum.mymarket.model.CartItem;
 import ru.yandex.practicum.mymarket.model.Order;
@@ -23,28 +25,33 @@ public class OrderService {
     private final ItemRepository itemRepository;
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
+    private final PaymentClientService paymentClientService;
 
     public OrderService(
             CartItemRepository cartItemRepository,
             ItemRepository itemRepository,
             OrderRepository orderRepository,
-            OrderItemRepository orderItemRepository
+            OrderItemRepository orderItemRepository,
+            PaymentClientService paymentClientService
     ) {
         this.cartItemRepository = cartItemRepository;
         this.itemRepository = itemRepository;
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
+        this.paymentClientService = paymentClientService;
     }
 
     @Transactional
-    public Mono<Long> buy() {
+    public Mono<CheckoutResult> buy() {
         return cartItemRepository.findAllByOrderByItemIdAsc()
                 .collectList()
                 .flatMap(cartItems -> {
                     if (cartItems.isEmpty()) {
-                        return Mono.just(-1L);
+                        return Mono.just(CheckoutResult.empty());
                     }
-                    return saveOrder(cartItems);
+                    return calculateTotal(cartItems)
+                            .flatMap(total -> paymentClientService.pay(total))
+                            .flatMap(payment -> finishCheckout(cartItems, payment));
                 });
     }
 
@@ -58,6 +65,20 @@ public class OrderService {
     public Flux<OrderDto> findAll() {
         return orderRepository.findAllByOrderByIdAsc()
                 .flatMap(this::toDto);
+    }
+
+    private Mono<CheckoutResult> finishCheckout(List<CartItem> cartItems, OrderPaymentResult payment) {
+        if (!payment.success()) {
+            return Mono.just(CheckoutResult.rejected(payment.message()));
+        }
+        return saveOrder(cartItems).map(CheckoutResult::paid);
+    }
+
+    private Mono<Long> calculateTotal(List<CartItem> cartItems) {
+        return Flux.fromIterable(cartItems)
+                .flatMap(cartItem -> itemRepository.findById(cartItem.getItemId())
+                        .map(item -> item.getPrice() * cartItem.getQuantity()))
+                .reduce(0L, Long::sum);
     }
 
     private Mono<Long> saveOrder(List<CartItem> cartItems) {

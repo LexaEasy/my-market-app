@@ -23,11 +23,14 @@ public class OrderController {
     @PostMapping("/buy")
     public Mono<String> buy() {
         return orderService.buy()
-                .map(orderId -> {
-                    if (orderId == -1) {
+                .map(result -> {
+                    if (result.emptyCart()) {
                         return "redirect:/cart/items";
                     }
-                    return "redirect:/orders/" + orderId + "?newOrder=true";
+                    if (!result.success()) {
+                        return "redirect:/cart/items?paymentError=true";
+                    }
+                    return "redirect:/orders/" + result.orderId() + "?newOrder=true";
                 });
     }
 

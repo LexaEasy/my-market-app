@@ -36,6 +36,10 @@ public class CartController {
                 .doOnNext(cartPage -> {
                     model.addAttribute("items", cartPage.items());
                     model.addAttribute("total", cartPage.total());
+                    model.addAttribute("paymentAvailable", cartPage.paymentAvailable());
+                    model.addAttribute("balance", cartPage.balance());
+                    model.addAttribute("purchaseAvailable", cartPage.purchaseAvailable());
+                    model.addAttribute("paymentMessage", cartPage.paymentMessage());
                 })
                 .then();
     }

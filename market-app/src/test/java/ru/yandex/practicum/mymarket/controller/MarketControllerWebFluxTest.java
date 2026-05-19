@@ -8,6 +8,7 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.dto.CartPage;
+import ru.yandex.practicum.mymarket.dto.CheckoutResult;
 import ru.yandex.practicum.mymarket.dto.CatalogPage;
 import ru.yandex.practicum.mymarket.dto.ItemDto;
 import ru.yandex.practicum.mymarket.dto.OrderDto;
@@ -135,7 +136,11 @@ class MarketControllerWebFluxTest {
     void shouldRenderCartPage() {
         CartPage cartPage = new CartPage(
                 List.of(new ItemDto(1, "Товар", "Описание", "images/item.jpg", 100, 2)),
-                200
+                200,
+                true,
+                1000,
+                true,
+                null
         );
         when(cartService.findCart()).thenReturn(Mono.just(cartPage));
 
@@ -169,7 +174,7 @@ class MarketControllerWebFluxTest {
 
     @Test
     void shouldBuyCartAndRedirectToNewOrder() {
-        when(orderService.buy()).thenReturn(Mono.just(10L));
+        when(orderService.buy()).thenReturn(Mono.just(CheckoutResult.paid(10L)));
 
         webTestClient.post()
                 .uri("/buy")
@@ -182,13 +187,26 @@ class MarketControllerWebFluxTest {
 
     @Test
     void shouldRedirectToCartWhenCartIsEmpty() {
-        when(orderService.buy()).thenReturn(Mono.just(-1L));
+        when(orderService.buy()).thenReturn(Mono.just(CheckoutResult.empty()));
 
         webTestClient.post()
                 .uri("/buy")
                 .exchange()
                 .expectStatus().is3xxRedirection()
                 .expectHeader().valueEquals("Location", "/cart/items");
+
+        verify(orderService).buy();
+    }
+
+    @Test
+    void shouldRedirectToCartWhenPaymentIsRejected() {
+        when(orderService.buy()).thenReturn(Mono.just(CheckoutResult.rejected("Недостаточно средств")));
+
+        webTestClient.post()
+                .uri("/buy")
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueEquals("Location", "/cart/items?paymentError=true");
 
         verify(orderService).buy();
     }

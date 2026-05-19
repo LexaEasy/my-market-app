@@ -4,7 +4,9 @@ WORKDIR /workspace
 
 COPY .mvn .mvn
 COPY mvnw pom.xml ./
+COPY api/payment-api.yaml api/payment-api.yaml
 COPY market-app/pom.xml market-app/pom.xml
+COPY payment-service/pom.xml payment-service/pom.xml
 RUN chmod +x mvnw && ./mvnw -pl market-app dependency:go-offline -B
 
 COPY market-app/src market-app/src

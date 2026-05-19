@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 320" role="img" aria-label="Настольная лампа">
+  <rect width="480" height="320" fill="#f5f3ff"/>
+  <path d="M203 46h124l29 86H174l29-86Z" fill="#a78bfa" stroke="#111827" stroke-width="8"/>
+  <path d="M251 132h28v91h-28z" fill="#facc15" stroke="#111827" stroke-width="7"/>
+  <path d="M205 278h120c-7-31-29-55-60-55s-53 24-60 55Z" fill="#f97316" stroke="#111827" stroke-width="8"/>
+  <path d="M190 132c16 35 47 55 75 55s59-20 75-55" fill="none" stroke="#111827" stroke-width="6"/>
+  <path d="M175 132h181" stroke="#111827" stroke-width="8" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 320" role="img" aria-label="Городской рюкзак">
+  <rect width="480" height="320" fill="#fff7ed"/>
+  <path d="M160 130c0-55 36-92 80-92s80 37 80 92v143c0 16-13 29-29 29H189c-16 0-29-13-29-29V130Z" fill="#2563eb" stroke="#111827" stroke-width="8"/>
+  <path d="M193 122c0-33 20-55 47-55s47 22 47 55" fill="none" stroke="#93c5fd" stroke-width="12" stroke-linecap="round"/>
+  <path d="M187 198h106v83H187z" fill="#facc15" stroke="#111827" stroke-width="7"/>
+  <path d="M151 159h-24v83h24M329 159h24v83h-24" fill="#1d4ed8" stroke="#111827" stroke-width="7"/>
+  <path d="M210 230h60" stroke="#111827" stroke-width="7" stroke-linecap="round"/>
+</svg>

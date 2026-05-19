@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 320" role="img" aria-label="Керамическая кружка">
+  <rect width="480" height="320" fill="#f8fafc"/>
+  <path d="M160 104h153v111c0 43-35 78-78 78s-75-35-75-78V104Z" fill="#fef3c7" stroke="#111827" stroke-width="8"/>
+  <path d="M313 136h25c31 0 55 22 55 50s-24 50-55 50h-25v-29h24c14 0 25-9 25-21s-11-21-25-21h-24v-29Z" fill="#fde68a" stroke="#111827" stroke-width="8"/>
+  <path d="M204 79c-15-21 17-31 0-52M242 79c-15-21 17-31 0-52M280 79c-15-21 17-31 0-52" fill="none" stroke="#64748b" stroke-width="7" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,26 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: payment-service/Dockerfile
+    ports:
+      - "8081:8081"
+
+  market-app:
+    build:
+      context: .
+      dockerfile: market-app/Dockerfile
+    depends_on:
+      - redis
+      - payment-service
+    environment:
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      APP_PAYMENT_SERVICE_BASE_URL: http://payment-service:8081
+    ports:
+      - "8080:8080"

@@ -29,20 +29,26 @@ public class ItemService {
 
     private final ItemRepository itemRepository;
     private final CartItemRepository cartItemRepository;
+    private final ItemCacheService itemCacheService;
 
-    public ItemService(ItemRepository itemRepository, CartItemRepository cartItemRepository) {
+    public ItemService(
+            ItemRepository itemRepository,
+            CartItemRepository cartItemRepository,
+            ItemCacheService itemCacheService
+    ) {
         this.itemRepository = itemRepository;
         this.cartItemRepository = cartItemRepository;
+        this.itemCacheService = itemCacheService;
     }
 
     @Transactional(readOnly = true)
     public Flux<Item> findAll() {
-        return itemRepository.findAll();
+        return itemCacheService.findAll(itemRepository.findAll());
     }
 
     @Transactional(readOnly = true)
     public Mono<ItemDto> findById(long id) {
-        return itemRepository.findById(id)
+        return itemCacheService.findById(id, itemRepository.findById(id))
                 .flatMap(item -> findCount(item.getId()).map(count -> toDto(item, count)));
     }
 
@@ -53,7 +59,7 @@ public class ItemService {
         int normalizedPageNumber = normalizePageNumber(pageNumber);
         int normalizedPageSize = normalizePageSize(pageSize);
 
-        return itemRepository.findAll()
+        return itemCacheService.findAll(itemRepository.findAll())
                 .filter(matchesSearch(normalizedSearch))
                 .sort(resolveComparator(itemSort))
                 .collectList()

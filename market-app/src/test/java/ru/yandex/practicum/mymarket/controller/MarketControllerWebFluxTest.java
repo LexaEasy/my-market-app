@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.web.reactive.function.BodyInserters;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.dto.CartPage;
@@ -104,7 +105,13 @@ class MarketControllerWebFluxTest {
         when(cartService.updateItemCount(1, CartAction.PLUS)).thenReturn(Mono.empty());
 
         webTestClient.post()
-                .uri("/items?id=1&search={search}&sort=PRICE&pageNumber=2&pageSize=10&action=PLUS", "товар")
+                .uri("/items")
+                .body(BodyInserters.fromFormData("id", "1")
+                        .with("search", "товар")
+                        .with("sort", "PRICE")
+                        .with("pageNumber", "2")
+                        .with("pageSize", "10")
+                        .with("action", "PLUS"))
                 .exchange()
                 .expectStatus().is3xxRedirection()
                 .expectHeader()
@@ -121,7 +128,8 @@ class MarketControllerWebFluxTest {
         when(itemService.findById(1)).thenReturn(Mono.just(item));
 
         webTestClient.post()
-                .uri("/items/1?action=PLUS")
+                .uri("/items/1")
+                .body(BodyInserters.fromFormData("action", "PLUS"))
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody(String.class)
@@ -162,7 +170,8 @@ class MarketControllerWebFluxTest {
         when(cartService.findCart()).thenReturn(Mono.just(cartPage));
 
         webTestClient.post()
-                .uri("/cart/items?id=1&action=DELETE")
+                .uri("/cart/items")
+                .body(BodyInserters.fromFormData("id", "1").with("action", "DELETE"))
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody(String.class)

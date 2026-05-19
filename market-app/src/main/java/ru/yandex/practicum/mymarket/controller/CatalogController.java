@@ -5,13 +5,14 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Mono;
+import ru.yandex.practicum.mymarket.dto.CartItemForm;
 import ru.yandex.practicum.mymarket.dto.CatalogPage;
-import ru.yandex.practicum.mymarket.model.CartAction;
 import ru.yandex.practicum.mymarket.service.CartService;
 import ru.yandex.practicum.mymarket.service.ItemService;
 
@@ -48,21 +49,19 @@ public class CatalogController {
     }
 
     @PostMapping("/items")
-    public Mono<String> updateCatalogItem(
-            @RequestParam long id,
-            @RequestParam(required = false) String search,
-            @RequestParam(required = false) String sort,
-            @RequestParam(required = false) Integer pageNumber,
-            @RequestParam(required = false) Integer pageSize,
-            @RequestParam CartAction action
-    ) {
-        return cartService.updateItemCount(id, action)
-                .thenReturn(redirectToCatalog(search, sort, pageNumber, pageSize));
+    public Mono<String> updateCatalogItem(@ModelAttribute CartItemForm form) {
+        return cartService.updateItemCount(form.getId(), form.getAction())
+                .thenReturn(redirectToCatalog(
+                        form.getSearch(),
+                        form.getSort(),
+                        form.getPageNumber(),
+                        form.getPageSize()
+                ));
     }
 
     @PostMapping("/items/{id}")
-    public Mono<String> updateItem(@PathVariable long id, @RequestParam CartAction action, Model model) {
-        return cartService.updateItemCount(id, action)
+    public Mono<String> updateItem(@PathVariable long id, @ModelAttribute CartItemForm form, Model model) {
+        return cartService.updateItemCount(id, form.getAction())
                 .then(getItem(id, model));
     }
 

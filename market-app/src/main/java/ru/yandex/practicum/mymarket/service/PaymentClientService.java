@@ -3,6 +3,7 @@ package ru.yandex.practicum.mymarket.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.dto.OrderPaymentResult;
@@ -28,7 +29,8 @@ public class PaymentClientService {
     public Mono<PaymentAvailability> getBalance() {
         return paymentsApi.getBalance()
                 .map(response -> PaymentAvailability.available(response.getBalance()))
-                .onErrorReturn(PaymentAvailability.unavailable(PAYMENT_SERVICE_UNAVAILABLE));
+                .onErrorResume(WebClientResponseException.class, this::handleBalanceResponseError)
+                .onErrorResume(WebClientRequestException.class, this::handleBalanceRequestError);
     }
 
     public Mono<OrderPaymentResult> pay(long amount) {
@@ -36,7 +38,19 @@ public class PaymentClientService {
         return paymentsApi.pay(request)
                 .map(this::toPaymentResult)
                 .onErrorResume(WebClientResponseException.class, this::handlePaymentError)
-                .onErrorReturn(OrderPaymentResult.unavailable(PAYMENT_SERVICE_UNAVAILABLE));
+                .onErrorResume(WebClientRequestException.class, this::handlePaymentRequestError);
+    }
+
+    private Mono<PaymentAvailability> handleBalanceRequestError(WebClientRequestException error) {
+        return Mono.just(PaymentAvailability.unavailable(PAYMENT_SERVICE_UNAVAILABLE));
+    }
+
+    private Mono<PaymentAvailability> handleBalanceResponseError(WebClientResponseException error) {
+        return Mono.just(PaymentAvailability.unavailable(PAYMENT_SERVICE_UNAVAILABLE));
+    }
+
+    private Mono<OrderPaymentResult> handlePaymentRequestError(WebClientRequestException error) {
+        return Mono.just(OrderPaymentResult.unavailable(PAYMENT_SERVICE_UNAVAILABLE));
     }
 
     private OrderPaymentResult toPaymentResult(PaymentResponse response) {

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 320" role="img" aria-label="Спортивная бутылка">
+  <rect width="480" height="320" fill="#eef5ff"/>
+  <path d="M210 67h60v44l28 36v120c0 18-14 32-32 32h-52c-18 0-32-14-32-32V147l28-36V67Z" fill="#38bdf8" stroke="#0f172a" stroke-width="8"/>
+  <path d="M207 40h66v31h-66z" fill="#f97316" stroke="#0f172a" stroke-width="8"/>
+  <path d="M182 179h116v46H182z" fill="#e0f2fe" stroke="#0f172a" stroke-width="6"/>
+  <path d="M217 121h46" stroke="#0f172a" stroke-width="7" stroke-linecap="round"/>
+</svg>

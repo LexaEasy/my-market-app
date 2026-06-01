@@ -60,7 +60,7 @@ class MarketControllerWebFluxTest {
                 "ALPHA",
                 new Paging(5, 1, false, false)
         );
-        when(itemService.findCatalog("товар", "ALPHA", 1, 5)).thenReturn(Mono.just(catalogPage));
+        when(itemService.findCatalog(null, "товар", "ALPHA", 1, 5)).thenReturn(Mono.just(catalogPage));
 
         webTestClient.get()
                 .uri("/?search={search}&sort={sort}&pageNumber={pageNumber}&pageSize={pageSize}",
@@ -72,13 +72,13 @@ class MarketControllerWebFluxTest {
                 .value(containsString("Товар"))
                 .value(containsString("Страница: 1"));
 
-        verify(itemService).findCatalog("товар", "ALPHA", 1, 5);
+        verify(itemService).findCatalog(null, "товар", "ALPHA", 1, 5);
     }
 
     @Test
     void shouldRenderItemPage() {
         ItemDto item = new ItemDto(1, "Товар", "Описание", "images/item.jpg", 100, 0);
-        when(itemService.findById(1)).thenReturn(Mono.just(item));
+        when(itemService.findById(1, null)).thenReturn(Mono.just(item));
 
         webTestClient.get()
                 .uri("/items/1")
@@ -89,25 +89,25 @@ class MarketControllerWebFluxTest {
                 .value(containsString("Описание"))
                 .value(containsString("100 руб."));
 
-        verify(itemService).findById(1);
+        verify(itemService).findById(1, null);
     }
 
     @Test
     void shouldReturnNotFoundWhenItemDoesNotExist() {
-        when(itemService.findById(404)).thenReturn(Mono.empty());
+        when(itemService.findById(404, null)).thenReturn(Mono.empty());
 
         webTestClient.get()
                 .uri("/items/404")
                 .exchange()
                 .expectStatus().isNotFound();
 
-        verify(itemService).findById(404);
+        verify(itemService).findById(404, null);
     }
 
     @Test
     @WithMockUser(username = "jane")
     void shouldUpdateCatalogItemAndRedirectBackToCatalog() {
-        when(cartService.updateItemCount(1, CartAction.PLUS)).thenReturn(Mono.empty());
+        when(cartService.updateItemCount("jane", 1, CartAction.PLUS)).thenReturn(Mono.empty());
 
         webTestClient.post()
                 .uri("/items")
@@ -123,15 +123,15 @@ class MarketControllerWebFluxTest {
                 .valueEquals("Location",
                         "/items?search=%D1%82%D0%BE%D0%B2%D0%B0%D1%80&sort=PRICE&pageNumber=2&pageSize=10");
 
-        verify(cartService).updateItemCount(1, CartAction.PLUS);
+        verify(cartService).updateItemCount("jane", 1, CartAction.PLUS);
     }
 
     @Test
     @WithMockUser(username = "jane")
     void shouldUpdateItemAndRenderItemPage() {
         ItemDto item = new ItemDto(1, "Товар", "Описание", "images/item.jpg", 100, 1);
-        when(cartService.updateItemCount(1, CartAction.PLUS)).thenReturn(Mono.empty());
-        when(itemService.findById(1)).thenReturn(Mono.just(item));
+        when(cartService.updateItemCount("jane", 1, CartAction.PLUS)).thenReturn(Mono.empty());
+        when(itemService.findById(1, "jane")).thenReturn(Mono.just(item));
 
         webTestClient.post()
                 .uri("/items/1")
@@ -142,8 +142,8 @@ class MarketControllerWebFluxTest {
                 .value(containsString("Товар"))
                 .value(containsString(">1</span>"));
 
-        verify(cartService).updateItemCount(1, CartAction.PLUS);
-        verify(itemService).findById(1);
+        verify(cartService).updateItemCount("jane", 1, CartAction.PLUS);
+        verify(itemService).findById(1, "jane");
     }
 
     @Test
@@ -157,7 +157,7 @@ class MarketControllerWebFluxTest {
                 true,
                 null
         );
-        when(cartService.findCart()).thenReturn(Mono.just(cartPage));
+        when(cartService.findCart("jane")).thenReturn(Mono.just(cartPage));
 
         webTestClient.get()
                 .uri("/cart/items")
@@ -167,7 +167,7 @@ class MarketControllerWebFluxTest {
                 .value(containsString("Товар"))
                 .value(containsString("Итого: 200 руб."));
 
-        verify(cartService).findCart();
+        verify(cartService).findCart("jane");
     }
 
     @Test
@@ -183,8 +183,8 @@ class MarketControllerWebFluxTest {
     @WithMockUser(username = "jane")
     void shouldUpdateCartItemAndRenderCartPage() {
         CartPage cartPage = new CartPage(List.of(), 0);
-        when(cartService.updateItemCount(1, CartAction.DELETE)).thenReturn(Mono.empty());
-        when(cartService.findCart()).thenReturn(Mono.just(cartPage));
+        when(cartService.updateItemCount("jane", 1, CartAction.DELETE)).thenReturn(Mono.empty());
+        when(cartService.findCart("jane")).thenReturn(Mono.just(cartPage));
 
         webTestClient.post()
                 .uri("/cart/items")
@@ -194,14 +194,14 @@ class MarketControllerWebFluxTest {
                 .expectBody(String.class)
                 .value(containsString("Витрина магазина"));
 
-        verify(cartService).updateItemCount(1, CartAction.DELETE);
-        verify(cartService).findCart();
+        verify(cartService).updateItemCount("jane", 1, CartAction.DELETE);
+        verify(cartService).findCart("jane");
     }
 
     @Test
     @WithMockUser(username = "jane")
     void shouldBuyCartAndRedirectToNewOrder() {
-        when(orderService.buy()).thenReturn(Mono.just(CheckoutResult.paid(10L)));
+        when(orderService.buy("jane")).thenReturn(Mono.just(CheckoutResult.paid(10L)));
 
         webTestClient.post()
                 .uri("/buy")
@@ -209,13 +209,13 @@ class MarketControllerWebFluxTest {
                 .expectStatus().is3xxRedirection()
                 .expectHeader().valueEquals("Location", "/orders/10?newOrder=true");
 
-        verify(orderService).buy();
+        verify(orderService).buy("jane");
     }
 
     @Test
     @WithMockUser(username = "jane")
     void shouldRedirectToCartWhenCartIsEmpty() {
-        when(orderService.buy()).thenReturn(Mono.just(CheckoutResult.empty()));
+        when(orderService.buy("jane")).thenReturn(Mono.just(CheckoutResult.empty()));
 
         webTestClient.post()
                 .uri("/buy")
@@ -223,13 +223,13 @@ class MarketControllerWebFluxTest {
                 .expectStatus().is3xxRedirection()
                 .expectHeader().valueEquals("Location", "/cart/items");
 
-        verify(orderService).buy();
+        verify(orderService).buy("jane");
     }
 
     @Test
     @WithMockUser(username = "jane")
     void shouldRedirectToCartWhenPaymentIsRejected() {
-        when(orderService.buy()).thenReturn(Mono.just(CheckoutResult.rejected("Недостаточно средств")));
+        when(orderService.buy("jane")).thenReturn(Mono.just(CheckoutResult.rejected("Недостаточно средств")));
 
         webTestClient.post()
                 .uri("/buy")
@@ -237,7 +237,7 @@ class MarketControllerWebFluxTest {
                 .expectStatus().is3xxRedirection()
                 .expectHeader().valueEquals("Location", "/cart/items?paymentError=true");
 
-        verify(orderService).buy();
+        verify(orderService).buy("jane");
     }
 
     @Test
@@ -248,7 +248,7 @@ class MarketControllerWebFluxTest {
                 List.of(new ItemDto(-1, "Товар", "", "", 100, 2)),
                 200
         ));
-        when(orderService.findAll()).thenReturn(Flux.fromIterable(orders));
+        when(orderService.findAll("jane")).thenReturn(Flux.fromIterable(orders));
 
         webTestClient.get()
                 .uri("/orders")
@@ -258,7 +258,7 @@ class MarketControllerWebFluxTest {
                 .value(containsString("Заказ №10"))
                 .value(containsString("Сумма: 200 руб."));
 
-        verify(orderService).findAll();
+        verify(orderService).findAll("jane");
     }
 
     @Test
@@ -269,7 +269,7 @@ class MarketControllerWebFluxTest {
                 List.of(new ItemDto(-1, "Товар", "", "", 100, 2)),
                 200
         );
-        when(orderService.findById(10)).thenReturn(Mono.just(order));
+        when(orderService.findById("jane", 10)).thenReturn(Mono.just(order));
 
         webTestClient.get()
                 .uri("/orders/10?newOrder=true")
@@ -280,19 +280,19 @@ class MarketControllerWebFluxTest {
                 .value(containsString("Заказ №10"))
                 .value(containsString("Сумма: 200 руб."));
 
-        verify(orderService).findById(10);
+        verify(orderService).findById("jane", 10);
     }
 
     @Test
     @WithMockUser(username = "jane")
     void shouldReturnNotFoundWhenOrderDoesNotExist() {
-        when(orderService.findById(404)).thenReturn(Mono.empty());
+        when(orderService.findById("jane", 404)).thenReturn(Mono.empty());
 
         webTestClient.get()
                 .uri("/orders/404")
                 .exchange()
                 .expectStatus().isNotFound();
 
-        verify(orderService).findById(404);
+        verify(orderService).findById("jane", 404);
     }
 }

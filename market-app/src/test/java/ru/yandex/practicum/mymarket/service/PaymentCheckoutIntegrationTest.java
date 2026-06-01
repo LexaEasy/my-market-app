@@ -27,6 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest
 class PaymentCheckoutIntegrationTest {
 
+    private static final String USERNAME = "user";
+
     private static final AtomicReference<PaymentScenario> paymentScenario = new AtomicReference<>();
     private static final AtomicInteger payRequests = new AtomicInteger();
     private static final AtomicReference<String> lastPayRequest = new AtomicReference<>();
@@ -83,7 +85,7 @@ class PaymentCheckoutIntegrationTest {
     @Test
     void shouldCreateOrderAfterSuccessfulPayment() {
         StepVerifier.create(addSeededItemToCart()
-                        .then(orderService.buy())
+                        .then(orderService.buy(USERNAME))
                         .flatMap(result -> Mono.zip(
                                 Mono.just(result),
                                 orderRepository.findById(result.orderId()),
@@ -103,7 +105,7 @@ class PaymentCheckoutIntegrationTest {
     void shouldDisablePurchaseWhenBalanceIsNotEnough() {
         paymentScenario.set(PaymentScenario.notEnoughBalance());
 
-        StepVerifier.create(addSeededItemToCart().then(cartService.findCart()))
+        StepVerifier.create(addSeededItemToCart().then(cartService.findCart(USERNAME)))
                 .assertNext(cartPage -> {
                     assertThat(cartPage.paymentAvailable()).isTrue();
                     assertThat(cartPage.purchaseAvailable()).isFalse();
@@ -117,7 +119,7 @@ class PaymentCheckoutIntegrationTest {
         paymentScenario.set(PaymentScenario.rejected());
 
         StepVerifier.create(addSeededItemToCart()
-                        .then(orderService.buy())
+                        .then(orderService.buy(USERNAME))
                         .flatMap(result -> orderRepository.findAll()
                                 .collectList()
                                 .map(orders -> new RejectedCheckout(result.success(), result.message(), orders.size()))))
@@ -133,7 +135,7 @@ class PaymentCheckoutIntegrationTest {
     void shouldDisablePurchaseWhenPaymentServiceIsUnavailable() {
         paymentScenario.set(PaymentScenario.serviceUnavailable());
 
-        StepVerifier.create(addSeededItemToCart().then(cartService.findCart()))
+        StepVerifier.create(addSeededItemToCart().then(cartService.findCart(USERNAME)))
                 .assertNext(cartPage -> {
                     assertThat(cartPage.paymentAvailable()).isFalse();
                     assertThat(cartPage.purchaseAvailable()).isFalse();
@@ -144,7 +146,7 @@ class PaymentCheckoutIntegrationTest {
 
     private Mono<Void> addSeededItemToCart() {
         return itemRepository.findById(1L)
-                .flatMap(item -> cartService.updateItemCount(item.getId(), CartAction.PLUS));
+                .flatMap(item -> cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS));
     }
 
     private static Mono<Void> handleBalance(HttpServerResponse response) {

@@ -33,6 +33,8 @@ class PaymentCheckoutIntegrationTest {
     private static final AtomicInteger payRequests = new AtomicInteger();
     private static final AtomicReference<String> lastBalanceAuthorization = new AtomicReference<>();
     private static final AtomicReference<String> lastPayAuthorization = new AtomicReference<>();
+    private static final AtomicReference<String> lastBalanceUsername = new AtomicReference<>();
+    private static final AtomicReference<String> lastPayUsername = new AtomicReference<>();
     private static final AtomicReference<String> lastPayRequest = new AtomicReference<>();
     private static final DisposableServer paymentServer = HttpServer.create()
             .host("localhost")
@@ -40,11 +42,20 @@ class PaymentCheckoutIntegrationTest {
             .route(routes -> routes
                     .post("/oauth/token", (request, response) -> handleToken(response))
                     .get("/payments/balance", (request, response) ->
-                            handleBalance(request.requestHeaders().get("Authorization"), response))
+                            handleBalance(
+                                    request.requestHeaders().get("Authorization"),
+                                    request.requestHeaders().get("X-User-Name"),
+                                    response
+                            ))
                     .post("/payments/pay", (request, response) -> request.receive()
                             .aggregate()
                             .asString()
-                            .flatMap(body -> handlePay(request.requestHeaders().get("Authorization"), response, body))))
+                            .flatMap(body -> handlePay(
+                                    request.requestHeaders().get("Authorization"),
+                                    request.requestHeaders().get("X-User-Name"),
+                                    response,
+                                    body
+                            ))))
             .bindNow();
 
     @Autowired
@@ -92,6 +103,8 @@ class PaymentCheckoutIntegrationTest {
         payRequests.set(0);
         lastBalanceAuthorization.set(null);
         lastPayAuthorization.set(null);
+        lastBalanceUsername.set(null);
+        lastPayUsername.set(null);
         lastPayRequest.set(null);
         StepVerifier.create(orderItemRepository.deleteAll()
                         .then(orderRepository.deleteAll())
@@ -114,6 +127,7 @@ class PaymentCheckoutIntegrationTest {
                     assertThat(result.getT3()).isEmpty();
                     assertThat(payRequests).hasValue(1);
                     assertThat(lastPayAuthorization).hasValue("Bearer test-payment-token");
+                    assertThat(lastPayUsername).hasValue(USERNAME);
                     assertThat(lastPayRequest.get()).contains("\"amount\":1490");
                 })
                 .verifyComplete();
@@ -128,6 +142,7 @@ class PaymentCheckoutIntegrationTest {
                     assertThat(cartPage.paymentAvailable()).isTrue();
                     assertThat(cartPage.purchaseAvailable()).isFalse();
                     assertThat(lastBalanceAuthorization).hasValue("Bearer test-payment-token");
+                    assertThat(lastBalanceUsername).hasValue(USERNAME);
                     assertThat(cartPage.paymentMessage()).isEqualTo("Недостаточно средств для оформления заказа");
                 })
                 .verifyComplete();
@@ -176,8 +191,9 @@ class PaymentCheckoutIntegrationTest {
         );
     }
 
-    private static Mono<Void> handleBalance(String authorization, HttpServerResponse response) {
+    private static Mono<Void> handleBalance(String authorization, String username, HttpServerResponse response) {
         lastBalanceAuthorization.set(authorization);
+        lastBalanceUsername.set(username);
         PaymentScenario scenario = paymentScenario.get();
         if (scenario.unavailable()) {
             return sendJson(response, HttpResponseStatus.SERVICE_UNAVAILABLE, "{\"message\":\"Service unavailable\"}");
@@ -185,9 +201,10 @@ class PaymentCheckoutIntegrationTest {
         return sendJson(response, HttpResponseStatus.OK, "{\"balance\":" + scenario.balance() + "}");
     }
 
-    private static Mono<Void> handlePay(String authorization, HttpServerResponse response, String body) {
+    private static Mono<Void> handlePay(String authorization, String username, HttpServerResponse response, String body) {
         payRequests.incrementAndGet();
         lastPayAuthorization.set(authorization);
+        lastPayUsername.set(username);
         lastPayRequest.set(body);
         PaymentScenario scenario = paymentScenario.get();
         return sendJson(response, scenario.payStatus(), scenario.payBody());

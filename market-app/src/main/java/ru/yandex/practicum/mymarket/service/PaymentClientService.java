@@ -9,7 +9,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.dto.OrderPaymentResult;
 import ru.yandex.practicum.mymarket.dto.PaymentAvailability;
-import ru.yandex.practicum.mymarket.payment.client.api.PaymentsApi;
+import ru.yandex.practicum.mymarket.payment.PaymentGatewayClient;
 import ru.yandex.practicum.mymarket.payment.client.model.PaymentRequest;
 import ru.yandex.practicum.mymarket.payment.client.model.PaymentResponse;
 
@@ -19,16 +19,16 @@ public class PaymentClientService {
     private static final String PAYMENT_SERVICE_UNAVAILABLE = "Сервис платежей недоступен";
     private static final String PAYMENT_REJECTED = "Платёж не выполнен";
 
-    private final PaymentsApi paymentsApi;
+    private final PaymentGatewayClient paymentGatewayClient;
     private final ObjectMapper objectMapper;
 
-    public PaymentClientService(PaymentsApi paymentsApi, ObjectMapper objectMapper) {
-        this.paymentsApi = paymentsApi;
+    public PaymentClientService(PaymentGatewayClient paymentGatewayClient, ObjectMapper objectMapper) {
+        this.paymentGatewayClient = paymentGatewayClient;
         this.objectMapper = objectMapper;
     }
 
     public Mono<PaymentAvailability> getBalance() {
-        return paymentsApi.getBalance()
+        return paymentGatewayClient.getBalance()
                 .map(response -> PaymentAvailability.available(response.getBalance()))
                 .onErrorResume(ClientAuthorizationException.class, this::handleBalanceAuthorizationError)
                 .onErrorResume(WebClientResponseException.class, this::handleBalanceResponseError)
@@ -37,7 +37,7 @@ public class PaymentClientService {
 
     public Mono<OrderPaymentResult> pay(long amount) {
         PaymentRequest request = new PaymentRequest().amount(amount);
-        return paymentsApi.pay(request)
+        return paymentGatewayClient.pay(request)
                 .map(this::toPaymentResult)
                 .onErrorResume(ClientAuthorizationException.class, this::handlePaymentAuthorizationError)
                 .onErrorResume(WebClientResponseException.class, this::handlePaymentError)

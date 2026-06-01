@@ -50,8 +50,12 @@ public class PaymentClientConfig {
     }
 
     @Bean
-    public WebClient paymentWebClient(ReactiveOAuth2AuthorizedClientManager paymentAuthorizedClientManager) {
+    public WebClient paymentWebClient(
+            PaymentClientProperties properties,
+            ReactiveOAuth2AuthorizedClientManager paymentAuthorizedClientManager
+    ) {
         return ApiClient.buildWebClientBuilder(ApiClient.createDefaultMapper(null))
+                .baseUrl(properties.baseUrl())
                 .filter(paymentAuthorizationFilter(paymentAuthorizedClientManager))
                 .build();
     }

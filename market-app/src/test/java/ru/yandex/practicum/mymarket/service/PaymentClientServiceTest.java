@@ -15,7 +15,7 @@ import org.springframework.web.reactive.function.client.WebClientRequestExceptio
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-import ru.yandex.practicum.mymarket.payment.client.api.PaymentsApi;
+import ru.yandex.practicum.mymarket.payment.PaymentGatewayClient;
 import ru.yandex.practicum.mymarket.payment.client.model.BalanceResponse;
 import ru.yandex.practicum.mymarket.payment.client.model.PaymentRequest;
 import ru.yandex.practicum.mymarket.payment.client.model.PaymentResponse;
@@ -32,14 +32,14 @@ import static org.mockito.Mockito.when;
 class PaymentClientServiceTest {
 
     @Mock
-    private PaymentsApi paymentsApi;
+    private PaymentGatewayClient paymentGatewayClient;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
     void shouldReturnAvailableBalance() {
-        PaymentClientService service = new PaymentClientService(paymentsApi, objectMapper);
-        when(paymentsApi.getBalance()).thenReturn(Mono.just(new BalanceResponse().balance(10000L)));
+        PaymentClientService service = new PaymentClientService(paymentGatewayClient, objectMapper);
+        when(paymentGatewayClient.getBalance()).thenReturn(Mono.just(new BalanceResponse().balance(10000L)));
 
         StepVerifier.create(service.getBalance())
                 .expectNextMatches(balance -> balance.available() && balance.balance() == 10000L)
@@ -48,8 +48,8 @@ class PaymentClientServiceTest {
 
     @Test
     void shouldReturnUnavailableBalanceWhenPaymentServiceFails() {
-        PaymentClientService service = new PaymentClientService(paymentsApi, objectMapper);
-        when(paymentsApi.getBalance()).thenReturn(Mono.error(connectionError()));
+        PaymentClientService service = new PaymentClientService(paymentGatewayClient, objectMapper);
+        when(paymentGatewayClient.getBalance()).thenReturn(Mono.error(connectionError()));
 
         StepVerifier.create(service.getBalance())
                 .expectNextMatches(balance -> !balance.available()
@@ -59,8 +59,8 @@ class PaymentClientServiceTest {
 
     @Test
     void shouldReturnUnavailableBalanceWhenPaymentServiceRespondsWithError() {
-        PaymentClientService service = new PaymentClientService(paymentsApi, objectMapper);
-        when(paymentsApi.getBalance()).thenReturn(Mono.error(WebClientResponseException.create(
+        PaymentClientService service = new PaymentClientService(paymentGatewayClient, objectMapper);
+        when(paymentGatewayClient.getBalance()).thenReturn(Mono.error(WebClientResponseException.create(
                 HttpStatus.SERVICE_UNAVAILABLE.value(),
                 HttpStatus.SERVICE_UNAVAILABLE.getReasonPhrase(),
                 HttpHeaders.EMPTY,
@@ -76,8 +76,8 @@ class PaymentClientServiceTest {
 
     @Test
     void shouldReturnUnavailableBalanceWhenPaymentAuthorizationFails() {
-        PaymentClientService service = new PaymentClientService(paymentsApi, objectMapper);
-        when(paymentsApi.getBalance()).thenReturn(Mono.error(authorizationError()));
+        PaymentClientService service = new PaymentClientService(paymentGatewayClient, objectMapper);
+        when(paymentGatewayClient.getBalance()).thenReturn(Mono.error(authorizationError()));
 
         StepVerifier.create(service.getBalance())
                 .expectNextMatches(balance -> !balance.available()
@@ -87,9 +87,9 @@ class PaymentClientServiceTest {
 
     @Test
     void shouldPropagateUnexpectedBalanceError() {
-        PaymentClientService service = new PaymentClientService(paymentsApi, objectMapper);
+        PaymentClientService service = new PaymentClientService(paymentGatewayClient, objectMapper);
         IllegalStateException error = new IllegalStateException("Mapping failed");
-        when(paymentsApi.getBalance()).thenReturn(Mono.error(error));
+        when(paymentGatewayClient.getBalance()).thenReturn(Mono.error(error));
 
         StepVerifier.create(service.getBalance())
                 .expectErrorSatisfies(actual -> assertThat(actual).isSameAs(error))
@@ -98,8 +98,8 @@ class PaymentClientServiceTest {
 
     @Test
     void shouldPaySuccessfully() {
-        PaymentClientService service = new PaymentClientService(paymentsApi, objectMapper);
-        when(paymentsApi.pay(org.mockito.ArgumentMatchers.any(PaymentRequest.class)))
+        PaymentClientService service = new PaymentClientService(paymentGatewayClient, objectMapper);
+        when(paymentGatewayClient.pay(org.mockito.ArgumentMatchers.any(PaymentRequest.class)))
                 .thenReturn(Mono.just(new PaymentResponse().success(true).balance(7500L)));
 
         StepVerifier.create(service.pay(2500L))
@@ -109,18 +109,18 @@ class PaymentClientServiceTest {
                 .verifyComplete();
 
         ArgumentCaptor<PaymentRequest> requestCaptor = ArgumentCaptor.forClass(PaymentRequest.class);
-        verify(paymentsApi).pay(requestCaptor.capture());
+        verify(paymentGatewayClient).pay(requestCaptor.capture());
         assertThat(requestCaptor.getValue().getAmount()).isEqualTo(2500L);
     }
 
     @Test
     void shouldReturnRejectedPaymentOnConflict() throws Exception {
-        PaymentClientService service = new PaymentClientService(paymentsApi, objectMapper);
+        PaymentClientService service = new PaymentClientService(paymentGatewayClient, objectMapper);
         byte[] body = objectMapper.writeValueAsBytes(new PaymentResponse()
                 .success(false)
                 .balance(1000L)
                 .message("Недостаточно средств"));
-        when(paymentsApi.pay(org.mockito.ArgumentMatchers.any(PaymentRequest.class)))
+        when(paymentGatewayClient.pay(org.mockito.ArgumentMatchers.any(PaymentRequest.class)))
                 .thenReturn(Mono.error(WebClientResponseException.create(
                         HttpStatus.CONFLICT.value(),
                         HttpStatus.CONFLICT.getReasonPhrase(),
@@ -139,8 +139,8 @@ class PaymentClientServiceTest {
 
     @Test
     void shouldReturnUnavailablePaymentWhenPaymentServiceIsUnreachable() {
-        PaymentClientService service = new PaymentClientService(paymentsApi, objectMapper);
-        when(paymentsApi.pay(org.mockito.ArgumentMatchers.any(PaymentRequest.class)))
+        PaymentClientService service = new PaymentClientService(paymentGatewayClient, objectMapper);
+        when(paymentGatewayClient.pay(org.mockito.ArgumentMatchers.any(PaymentRequest.class)))
                 .thenReturn(Mono.error(connectionError()));
 
         StepVerifier.create(service.pay(2500L))
@@ -152,8 +152,8 @@ class PaymentClientServiceTest {
 
     @Test
     void shouldReturnUnavailablePaymentWhenPaymentAuthorizationFails() {
-        PaymentClientService service = new PaymentClientService(paymentsApi, objectMapper);
-        when(paymentsApi.pay(org.mockito.ArgumentMatchers.any(PaymentRequest.class)))
+        PaymentClientService service = new PaymentClientService(paymentGatewayClient, objectMapper);
+        when(paymentGatewayClient.pay(org.mockito.ArgumentMatchers.any(PaymentRequest.class)))
                 .thenReturn(Mono.error(authorizationError()));
 
         StepVerifier.create(service.pay(2500L))
@@ -165,9 +165,9 @@ class PaymentClientServiceTest {
 
     @Test
     void shouldPropagateUnexpectedPaymentError() {
-        PaymentClientService service = new PaymentClientService(paymentsApi, objectMapper);
+        PaymentClientService service = new PaymentClientService(paymentGatewayClient, objectMapper);
         IllegalStateException error = new IllegalStateException("Mapping failed");
-        when(paymentsApi.pay(org.mockito.ArgumentMatchers.any(PaymentRequest.class)))
+        when(paymentGatewayClient.pay(org.mockito.ArgumentMatchers.any(PaymentRequest.class)))
                 .thenReturn(Mono.error(error));
 
         StepVerifier.create(service.pay(2500L))

@@ -2,6 +2,7 @@ package ru.yandex.practicum.mymarket.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.oauth2.client.ClientAuthorizationException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -29,6 +30,7 @@ public class PaymentClientService {
     public Mono<PaymentAvailability> getBalance() {
         return paymentsApi.getBalance()
                 .map(response -> PaymentAvailability.available(response.getBalance()))
+                .onErrorResume(ClientAuthorizationException.class, this::handleBalanceAuthorizationError)
                 .onErrorResume(WebClientResponseException.class, this::handleBalanceResponseError)
                 .onErrorResume(WebClientRequestException.class, this::handleBalanceRequestError);
     }
@@ -37,8 +39,13 @@ public class PaymentClientService {
         PaymentRequest request = new PaymentRequest().amount(amount);
         return paymentsApi.pay(request)
                 .map(this::toPaymentResult)
+                .onErrorResume(ClientAuthorizationException.class, this::handlePaymentAuthorizationError)
                 .onErrorResume(WebClientResponseException.class, this::handlePaymentError)
                 .onErrorResume(WebClientRequestException.class, this::handlePaymentRequestError);
+    }
+
+    private Mono<PaymentAvailability> handleBalanceAuthorizationError(ClientAuthorizationException error) {
+        return Mono.just(PaymentAvailability.unavailable(PAYMENT_SERVICE_UNAVAILABLE));
     }
 
     private Mono<PaymentAvailability> handleBalanceRequestError(WebClientRequestException error) {
@@ -50,6 +57,10 @@ public class PaymentClientService {
     }
 
     private Mono<OrderPaymentResult> handlePaymentRequestError(WebClientRequestException error) {
+        return Mono.just(OrderPaymentResult.unavailable(PAYMENT_SERVICE_UNAVAILABLE));
+    }
+
+    private Mono<OrderPaymentResult> handlePaymentAuthorizationError(ClientAuthorizationException error) {
         return Mono.just(OrderPaymentResult.unavailable(PAYMENT_SERVICE_UNAVAILABLE));
     }
 

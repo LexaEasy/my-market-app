@@ -9,6 +9,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.oauth2.client.ClientAuthorizationException;
+import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
@@ -65,6 +67,17 @@ class PaymentClientServiceTest {
                 new byte[0],
                 StandardCharsets.UTF_8
         )));
+
+        StepVerifier.create(service.getBalance())
+                .expectNextMatches(balance -> !balance.available()
+                        && balance.message().equals("Сервис платежей недоступен"))
+                .verifyComplete();
+    }
+
+    @Test
+    void shouldReturnUnavailableBalanceWhenPaymentAuthorizationFails() {
+        PaymentClientService service = new PaymentClientService(paymentsApi, objectMapper);
+        when(paymentsApi.getBalance()).thenReturn(Mono.error(authorizationError()));
 
         StepVerifier.create(service.getBalance())
                 .expectNextMatches(balance -> !balance.available()
@@ -138,6 +151,19 @@ class PaymentClientServiceTest {
     }
 
     @Test
+    void shouldReturnUnavailablePaymentWhenPaymentAuthorizationFails() {
+        PaymentClientService service = new PaymentClientService(paymentsApi, objectMapper);
+        when(paymentsApi.pay(org.mockito.ArgumentMatchers.any(PaymentRequest.class)))
+                .thenReturn(Mono.error(authorizationError()));
+
+        StepVerifier.create(service.pay(2500L))
+                .expectNextMatches(result -> !result.success()
+                        && !result.serviceAvailable()
+                        && result.message().equals("Сервис платежей недоступен"))
+                .verifyComplete();
+    }
+
+    @Test
     void shouldPropagateUnexpectedPaymentError() {
         PaymentClientService service = new PaymentClientService(paymentsApi, objectMapper);
         IllegalStateException error = new IllegalStateException("Mapping failed");
@@ -155,6 +181,13 @@ class PaymentClientServiceTest {
                 HttpMethod.GET,
                 URI.create("http://localhost:8081/payments/balance"),
                 HttpHeaders.EMPTY
+        );
+    }
+
+    private ClientAuthorizationException authorizationError() {
+        return new ClientAuthorizationException(
+                new OAuth2Error("invalid_client", "Invalid client credentials", null),
+                "payment-service"
         );
     }
 }

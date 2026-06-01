@@ -25,6 +25,7 @@ import ru.yandex.practicum.mymarket.service.OrderService;
 import java.util.List;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -127,6 +128,18 @@ class MarketControllerWebFluxTest {
     }
 
     @Test
+    void shouldRedirectAnonymousUserFromCatalogItemUpdate() {
+        webTestClient.post()
+                .uri("/items")
+                .body(BodyInserters.fromFormData("id", "1").with("action", "PLUS"))
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueEquals("Location", "/oauth2/authorization/keycloak");
+
+        verify(cartService, never()).updateItemCount("jane", 1, CartAction.PLUS);
+    }
+
+    @Test
     @WithMockUser(username = "jane")
     void shouldUpdateItemAndRenderItemPage() {
         ItemDto item = new ItemDto(1, "Товар", "Описание", "images/item.jpg", 100, 1);
@@ -177,6 +190,8 @@ class MarketControllerWebFluxTest {
                 .exchange()
                 .expectStatus().is3xxRedirection()
                 .expectHeader().valueEquals("Location", "/oauth2/authorization/keycloak");
+
+        verify(cartService, never()).findCart("jane");
     }
 
     @Test
@@ -199,6 +214,18 @@ class MarketControllerWebFluxTest {
     }
 
     @Test
+    void shouldRedirectAnonymousUserFromCartItemUpdate() {
+        webTestClient.post()
+                .uri("/cart/items")
+                .body(BodyInserters.fromFormData("id", "1").with("action", "DELETE"))
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueEquals("Location", "/oauth2/authorization/keycloak");
+
+        verify(cartService, never()).updateItemCount("jane", 1, CartAction.DELETE);
+    }
+
+    @Test
     @WithMockUser(username = "jane")
     void shouldBuyCartAndRedirectToNewOrder() {
         when(orderService.buy("jane")).thenReturn(Mono.just(CheckoutResult.paid(10L)));
@@ -210,6 +237,17 @@ class MarketControllerWebFluxTest {
                 .expectHeader().valueEquals("Location", "/orders/10?newOrder=true");
 
         verify(orderService).buy("jane");
+    }
+
+    @Test
+    void shouldRedirectAnonymousUserFromCheckout() {
+        webTestClient.post()
+                .uri("/buy")
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueEquals("Location", "/oauth2/authorization/keycloak");
+
+        verify(orderService, never()).buy("jane");
     }
 
     @Test
@@ -262,6 +300,17 @@ class MarketControllerWebFluxTest {
     }
 
     @Test
+    void shouldRedirectAnonymousUserFromOrdersPage() {
+        webTestClient.get()
+                .uri("/orders")
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueEquals("Location", "/oauth2/authorization/keycloak");
+
+        verify(orderService, never()).findAll("jane");
+    }
+
+    @Test
     @WithMockUser(username = "jane")
     void shouldRenderOrderPage() {
         OrderDto order = new OrderDto(
@@ -294,5 +343,16 @@ class MarketControllerWebFluxTest {
                 .expectStatus().isNotFound();
 
         verify(orderService).findById("jane", 404);
+    }
+
+    @Test
+    void shouldRedirectAnonymousUserFromOrderPage() {
+        webTestClient.get()
+                .uri("/orders/10")
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueEquals("Location", "/oauth2/authorization/keycloak");
+
+        verify(orderService, never()).findById("jane", 10);
     }
 }

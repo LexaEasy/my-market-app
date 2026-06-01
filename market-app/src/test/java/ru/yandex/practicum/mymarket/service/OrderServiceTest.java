@@ -59,7 +59,7 @@ class OrderServiceTest {
 
     @Test
     void shouldCreateOrderAndClearCart() {
-        when(paymentClientService.pay(2980L)).thenReturn(Mono.just(OrderPaymentResult.success(7020L)));
+        when(paymentClientService.pay(USERNAME, 2980L)).thenReturn(Mono.just(OrderPaymentResult.success(7020L)));
 
         StepVerifier.create(findSeededItem()
                         .flatMap(item -> cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS)
@@ -89,7 +89,7 @@ class OrderServiceTest {
 
     @Test
     void shouldFindOrderDtoById() {
-        when(paymentClientService.pay(2980L)).thenReturn(Mono.just(OrderPaymentResult.success(7020L)));
+        when(paymentClientService.pay(USERNAME, 2980L)).thenReturn(Mono.just(OrderPaymentResult.success(7020L)));
 
         StepVerifier.create(findSeededItem()
                         .flatMap(item -> cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS)
@@ -111,7 +111,7 @@ class OrderServiceTest {
 
     @Test
     void shouldFindAllOrders() {
-        when(paymentClientService.pay(1490L)).thenReturn(Mono.just(OrderPaymentResult.success(8510L)));
+        when(paymentClientService.pay(USERNAME, 1490L)).thenReturn(Mono.just(OrderPaymentResult.success(8510L)));
 
         StepVerifier.create(findSeededItem()
                         .flatMap(item -> cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS)
@@ -136,12 +136,15 @@ class OrderServiceTest {
                 })
                 .verifyComplete();
 
-        verify(paymentClientService, never()).pay(org.mockito.ArgumentMatchers.anyLong());
+        verify(paymentClientService, never()).pay(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyLong()
+        );
     }
 
     @Test
     void shouldNotCreateOrderWhenPaymentIsRejected() {
-        when(paymentClientService.pay(1490L))
+        when(paymentClientService.pay(USERNAME, 1490L))
                 .thenReturn(Mono.just(OrderPaymentResult.rejected(1000L, "Недостаточно средств")));
 
         StepVerifier.create(findSeededItem()
@@ -160,7 +163,8 @@ class OrderServiceTest {
 
     @Test
     void shouldKeepOrdersSeparatedByUser() {
-        when(paymentClientService.pay(1490L)).thenReturn(Mono.just(OrderPaymentResult.success(8510L)));
+        when(paymentClientService.pay(USERNAME, 1490L)).thenReturn(Mono.just(OrderPaymentResult.success(8510L)));
+        when(paymentClientService.pay(OTHER_USERNAME, 1490L)).thenReturn(Mono.just(OrderPaymentResult.success(8510L)));
 
         StepVerifier.create(findSeededItem()
                         .flatMap(item -> cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS)

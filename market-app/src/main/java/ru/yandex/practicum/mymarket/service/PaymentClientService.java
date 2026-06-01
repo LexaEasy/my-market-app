@@ -27,17 +27,17 @@ public class PaymentClientService {
         this.objectMapper = objectMapper;
     }
 
-    public Mono<PaymentAvailability> getBalance() {
-        return paymentGatewayClient.getBalance()
+    public Mono<PaymentAvailability> getBalance(String username) {
+        return paymentGatewayClient.getBalance(username)
                 .map(response -> PaymentAvailability.available(response.getBalance()))
                 .onErrorResume(ClientAuthorizationException.class, this::handleBalanceAuthorizationError)
                 .onErrorResume(WebClientResponseException.class, this::handleBalanceResponseError)
                 .onErrorResume(WebClientRequestException.class, this::handleBalanceRequestError);
     }
 
-    public Mono<OrderPaymentResult> pay(long amount) {
+    public Mono<OrderPaymentResult> pay(String username, long amount) {
         PaymentRequest request = new PaymentRequest().amount(amount);
-        return paymentGatewayClient.pay(request)
+        return paymentGatewayClient.pay(username, request)
                 .map(this::toPaymentResult)
                 .onErrorResume(ClientAuthorizationException.class, this::handlePaymentAuthorizationError)
                 .onErrorResume(WebClientResponseException.class, this::handlePaymentError)

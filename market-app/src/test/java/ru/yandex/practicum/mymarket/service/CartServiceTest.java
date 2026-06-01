@@ -63,7 +63,7 @@ class CartServiceTest {
 
     @Test
     void shouldReturnCartPageWithTotal() {
-        when(paymentClientService.getBalance()).thenReturn(Mono.just(PaymentAvailability.available(10000L)));
+        when(paymentClientService.getBalance(USERNAME)).thenReturn(Mono.just(PaymentAvailability.available(10000L)));
 
         StepVerifier.create(findSeededItem()
                         .flatMap(item -> cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS)
@@ -85,7 +85,7 @@ class CartServiceTest {
 
     @Test
     void shouldDisablePurchaseWhenBalanceIsNotEnough() {
-        when(paymentClientService.getBalance()).thenReturn(Mono.just(PaymentAvailability.available(1000L)));
+        when(paymentClientService.getBalance(USERNAME)).thenReturn(Mono.just(PaymentAvailability.available(1000L)));
 
         StepVerifier.create(findSeededItem()
                         .flatMap(item -> cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS)

@@ -54,7 +54,7 @@ public class OrderService {
                                 return Mono.just(CheckoutResult.empty());
                             }
                             return calculateTotal(cartItems)
-                                    .flatMap(total -> paymentClientService.pay(total))
+                                    .flatMap(total -> paymentClientService.pay(username, total))
                                     .flatMap(payment -> finishCheckout(userId, cartItems, payment));
                         }));
     }

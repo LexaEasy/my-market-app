@@ -42,7 +42,7 @@ public class CartService {
                 .flatMap(userId -> cartItemRepository.findAllByUserIdOrderByItemIdAsc(userId)
                         .flatMap(this::toDto)
                         .collectList()
-                        .flatMap(this::toCartPage));
+                        .flatMap(items -> toCartPage(username, items)));
     }
 
     @Transactional
@@ -108,7 +108,7 @@ public class CartService {
                 ));
     }
 
-    private Mono<CartPage> toCartPage(List<ItemDto> items) {
+    private Mono<CartPage> toCartPage(String username, List<ItemDto> items) {
         long total = items.stream()
                 .mapToLong(item -> item.price() * item.count())
                 .sum();
@@ -117,7 +117,7 @@ public class CartService {
             return Mono.just(new CartPage(items, total));
         }
 
-        return paymentClientService.getBalance()
+        return paymentClientService.getBalance(username)
                 .map(payment -> toCartPage(items, total, payment));
     }
 

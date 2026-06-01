@@ -10,6 +10,8 @@ import ru.yandex.practicum.mymarket.dto.CartPage;
 import ru.yandex.practicum.mymarket.dto.CartItemForm;
 import ru.yandex.practicum.mymarket.service.CartService;
 
+import java.security.Principal;
+
 @Controller
 public class CartController {
 
@@ -20,19 +22,19 @@ public class CartController {
     }
 
     @GetMapping("/cart/items")
-    public Mono<String> getCart(Model model) {
-        return fillModel(model).thenReturn("cart");
+    public Mono<String> getCart(Principal principal, Model model) {
+        return fillModel(principal, model).thenReturn("cart");
     }
 
     @PostMapping("/cart/items")
-    public Mono<String> updateCartItem(@ModelAttribute CartItemForm form, Model model) {
-        return cartService.updateItemCount(form.getId(), form.getAction())
-                .then(fillModel(model))
+    public Mono<String> updateCartItem(@ModelAttribute CartItemForm form, Principal principal, Model model) {
+        return cartService.updateItemCount(username(principal), form.getId(), form.getAction())
+                .then(fillModel(principal, model))
                 .thenReturn("cart");
     }
 
-    private Mono<Void> fillModel(Model model) {
-        return cartService.findCart()
+    private Mono<Void> fillModel(Principal principal, Model model) {
+        return cartService.findCart(username(principal))
                 .doOnNext(cartPage -> {
                     model.addAttribute("items", cartPage.items());
                     model.addAttribute("total", cartPage.total());
@@ -42,5 +44,9 @@ public class CartController {
                     model.addAttribute("paymentMessage", cartPage.paymentMessage());
                 })
                 .then();
+    }
+
+    private String username(Principal principal) {
+        return principal == null ? null : principal.getName();
     }
 }

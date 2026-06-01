@@ -20,39 +20,44 @@ import java.util.List;
 public class CartService {
 
     private final CartItemRepository cartItemRepository;
+    private final AppUserService appUserService;
     private final ItemRepository itemRepository;
     private final PaymentClientService paymentClientService;
 
     public CartService(
             CartItemRepository cartItemRepository,
+            AppUserService appUserService,
             ItemRepository itemRepository,
             PaymentClientService paymentClientService
     ) {
         this.cartItemRepository = cartItemRepository;
+        this.appUserService = appUserService;
         this.itemRepository = itemRepository;
         this.paymentClientService = paymentClientService;
     }
 
     @Transactional(readOnly = true)
-    public Mono<CartPage> findCart() {
-        return cartItemRepository.findAllByOrderByItemIdAsc()
-                .flatMap(this::toDto)
-                .collectList()
-                .flatMap(this::toCartPage);
+    public Mono<CartPage> findCart(String username) {
+        return findUserId(username)
+                .flatMap(userId -> cartItemRepository.findAllByUserIdOrderByItemIdAsc(userId)
+                        .flatMap(this::toDto)
+                        .collectList()
+                        .flatMap(this::toCartPage));
     }
 
     @Transactional
-    public Mono<Void> updateItemCount(long itemId, CartAction action) {
-        return switch (action) {
-            case PLUS -> addItem(itemId);
-            case MINUS -> removeOneItem(itemId);
-            case DELETE -> deleteItem(itemId);
-        };
+    public Mono<Void> updateItemCount(String username, long itemId, CartAction action) {
+        return findUserId(username)
+                .flatMap(userId -> switch (action) {
+                    case PLUS -> addItem(userId, itemId);
+                    case MINUS -> removeOneItem(userId, itemId);
+                    case DELETE -> deleteItem(userId, itemId);
+                });
     }
 
-    private Mono<Void> addItem(long itemId) {
-        return cartItemRepository.findByItemId(itemId)
-                .switchIfEmpty(findItem(itemId).map(item -> new CartItem(item.getId(), 0)))
+    private Mono<Void> addItem(long userId, long itemId) {
+        return cartItemRepository.findByUserIdAndItemId(userId, itemId)
+                .switchIfEmpty(findItem(itemId).map(item -> new CartItem(userId, item.getId(), 0)))
                 .flatMap(cartItem -> {
                     cartItem.increase();
                     return cartItemRepository.save(cartItem);
@@ -60,8 +65,8 @@ public class CartService {
                 .then();
     }
 
-    private Mono<Void> removeOneItem(long itemId) {
-        return cartItemRepository.findByItemId(itemId)
+    private Mono<Void> removeOneItem(long userId, long itemId) {
+        return cartItemRepository.findByUserIdAndItemId(userId, itemId)
                 .flatMap(cartItem -> {
                     cartItem.decrease();
                     if (cartItem.getQuantity() == 0) {
@@ -71,9 +76,19 @@ public class CartService {
                 });
     }
 
-    private Mono<Void> deleteItem(long itemId) {
-        return cartItemRepository.findByItemId(itemId)
+    private Mono<Void> deleteItem(long userId, long itemId) {
+        return cartItemRepository.findByUserIdAndItemId(userId, itemId)
                 .flatMap(cartItemRepository::delete);
+    }
+
+    private Mono<Long> findUserId(String username) {
+        if (username == null || username.isBlank()) {
+            return Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User is not authenticated"));
+        }
+        return appUserService.findOrCreateByUsername(username)
+                .filter(user -> user.isEnabled())
+                .map(user -> user.getId())
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN, "User is disabled")));
     }
 
     private Mono<Item> findItem(long itemId) {

@@ -11,6 +11,8 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.service.OrderService;
 
+import java.security.Principal;
+
 @Controller
 public class OrderController {
 
@@ -21,8 +23,8 @@ public class OrderController {
     }
 
     @PostMapping("/buy")
-    public Mono<String> buy() {
-        return orderService.buy()
+    public Mono<String> buy(Principal principal) {
+        return orderService.buy(username(principal))
                 .map(result -> {
                     if (result.emptyCart()) {
                         return "redirect:/cart/items";
@@ -35,8 +37,8 @@ public class OrderController {
     }
 
     @GetMapping("/orders")
-    public Mono<String> getOrders(Model model) {
-        return orderService.findAll()
+    public Mono<String> getOrders(Principal principal, Model model) {
+        return orderService.findAll(username(principal))
                 .collectList()
                 .doOnNext(orders -> model.addAttribute("orders", orders))
                 .thenReturn("orders");
@@ -46,14 +48,19 @@ public class OrderController {
     public Mono<String> getOrder(
             @PathVariable long id,
             @RequestParam(defaultValue = "false") boolean newOrder,
+            Principal principal,
             Model model
     ) {
-        return orderService.findById(id)
+        return orderService.findById(username(principal), id)
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Order not found")))
                 .doOnNext(order -> {
                     model.addAttribute("order", order);
                     model.addAttribute("newOrder", newOrder);
                 })
                 .thenReturn("order");
+    }
+
+    private String username(Principal principal) {
+        return principal == null ? null : principal.getName();
     }
 }

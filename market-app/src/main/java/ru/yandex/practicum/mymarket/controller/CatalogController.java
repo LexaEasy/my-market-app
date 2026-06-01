@@ -16,6 +16,8 @@ import ru.yandex.practicum.mymarket.dto.CatalogPage;
 import ru.yandex.practicum.mymarket.service.CartService;
 import ru.yandex.practicum.mymarket.service.ItemService;
 
+import java.security.Principal;
+
 @Controller
 public class CatalogController {
 
@@ -33,24 +35,25 @@ public class CatalogController {
             @RequestParam(required = false) String sort,
             @RequestParam(required = false) Integer pageNumber,
             @RequestParam(required = false) Integer pageSize,
+            Principal principal,
             Model model
     ) {
-        return itemService.findCatalog(search, sort, pageNumber, pageSize)
+        return itemService.findCatalog(username(principal), search, sort, pageNumber, pageSize)
                 .doOnNext(catalogPage -> fillModel(model, catalogPage))
                 .thenReturn("items");
     }
 
     @GetMapping("/items/{id}")
-    public Mono<String> getItem(@PathVariable long id, Model model) {
-        return itemService.findById(id)
+    public Mono<String> getItem(@PathVariable long id, Principal principal, Model model) {
+        return itemService.findById(id, username(principal))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Item not found")))
                 .doOnNext(item -> model.addAttribute("item", item))
                 .thenReturn("item");
     }
 
     @PostMapping("/items")
-    public Mono<String> updateCatalogItem(@ModelAttribute CartItemForm form) {
-        return cartService.updateItemCount(form.getId(), form.getAction())
+    public Mono<String> updateCatalogItem(@ModelAttribute CartItemForm form, Principal principal) {
+        return cartService.updateItemCount(username(principal), form.getId(), form.getAction())
                 .thenReturn(redirectToCatalog(
                         form.getSearch(),
                         form.getSort(),
@@ -60,9 +63,14 @@ public class CatalogController {
     }
 
     @PostMapping("/items/{id}")
-    public Mono<String> updateItem(@PathVariable long id, @ModelAttribute CartItemForm form, Model model) {
-        return cartService.updateItemCount(id, form.getAction())
-                .then(getItem(id, model));
+    public Mono<String> updateItem(
+            @PathVariable long id,
+            @ModelAttribute CartItemForm form,
+            Principal principal,
+            Model model
+    ) {
+        return cartService.updateItemCount(username(principal), id, form.getAction())
+                .then(getItem(id, principal, model));
     }
 
     private void fillModel(Model model, CatalogPage catalogPage) {
@@ -85,5 +93,9 @@ public class CatalogController {
         if (value != null) {
             builder.queryParam(name, value);
         }
+    }
+
+    private String username(Principal principal) {
+        return principal == null ? null : principal.getName();
     }
 }

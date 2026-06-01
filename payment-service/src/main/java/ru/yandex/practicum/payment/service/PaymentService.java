@@ -21,6 +21,10 @@ public class PaymentService {
 		return Mono.fromSupplier(balance::get);
 	}
 
+	public Mono<Long> getBalance(String username) {
+		return getBalance();
+	}
+
 	public Mono<PaymentResult> pay(long amount) {
 		return Mono.fromSupplier(() -> {
 			while (true) {
@@ -35,6 +39,10 @@ public class PaymentService {
 				}
 			}
 		});
+	}
+
+	public Mono<PaymentResult> pay(String username, long amount) {
+		return pay(amount);
 	}
 
 	public record PaymentResult(boolean success, long balance, String message) {

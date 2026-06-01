@@ -14,6 +14,8 @@ import ru.yandex.practicum.payment.service.PaymentService;
 @RestController
 public class PaymentController implements PaymentsApi {
 
+	public static final String USERNAME_HEADER = "X-User-Name";
+
 	private final PaymentService paymentService;
 
 	public PaymentController(PaymentService paymentService) {
@@ -22,7 +24,11 @@ public class PaymentController implements PaymentsApi {
 
 	@Override
 	public Mono<ResponseEntity<BalanceResponse>> getBalance(ServerWebExchange exchange) {
-		return paymentService.getBalance()
+		String username = usernameFrom(exchange);
+		if (username == null) {
+			return Mono.just(ResponseEntity.badRequest().build());
+		}
+		return paymentService.getBalance(username)
 				.map(balance -> ResponseEntity.ok(new BalanceResponse(balance)));
 	}
 
@@ -31,13 +37,22 @@ public class PaymentController implements PaymentsApi {
 			Mono<PaymentRequest> paymentRequest,
 			ServerWebExchange exchange
 	) {
+		String username = usernameFrom(exchange);
+		if (username == null) {
+			return Mono.just(ResponseEntity.badRequest().build());
+		}
 		return paymentRequest
-				.flatMap(request -> paymentService.pay(request.getAmount()))
+				.flatMap(request -> paymentService.pay(username, request.getAmount()))
 				.map(result -> {
 					PaymentResponse response = new PaymentResponse(result.success(), result.balance())
 							.message(result.message());
 					HttpStatus status = result.success() ? HttpStatus.OK : HttpStatus.CONFLICT;
 					return ResponseEntity.status(status).body(response);
 				});
+	}
+
+	private String usernameFrom(ServerWebExchange exchange) {
+		String username = exchange.getRequest().getHeaders().getFirst(USERNAME_HEADER);
+		return username == null || username.isBlank() ? null : username;
 	}
 }

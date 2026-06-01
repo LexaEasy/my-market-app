@@ -24,33 +24,37 @@ class PaymentControllerWebFluxTest {
 	@Autowired
 	private WebTestClient webTestClient;
 
+	private static final String USERNAME = "user";
+
 	@MockitoBean
 	private PaymentService paymentService;
 
 	@Test
 	void shouldReturnBalance() {
-		when(paymentService.getBalance()).thenReturn(Mono.just(10000L));
+		when(paymentService.getBalance(USERNAME)).thenReturn(Mono.just(10000L));
 
 		webTestClient.mutateWith(mockJwt())
 				.get()
 				.uri("/payments/balance")
+				.header(PaymentController.USERNAME_HEADER, USERNAME)
 				.exchange()
 				.expectStatus().isOk()
 				.expectHeader().contentTypeCompatibleWith(MediaType.APPLICATION_JSON)
 				.expectBody()
 				.jsonPath("$.balance").isEqualTo(10000);
 
-		verify(paymentService).getBalance();
+		verify(paymentService).getBalance(USERNAME);
 	}
 
 	@Test
 	void shouldPaySuccessfully() {
-		when(paymentService.pay(2500L))
+		when(paymentService.pay(USERNAME, 2500L))
 				.thenReturn(Mono.just(PaymentService.PaymentResult.success(7500L)));
 
 		webTestClient.mutateWith(mockJwt())
 				.post()
 				.uri("/payments/pay")
+				.header(PaymentController.USERNAME_HEADER, USERNAME)
 				.contentType(MediaType.APPLICATION_JSON)
 				.bodyValue(Map.of("amount", 2500))
 				.exchange()
@@ -61,17 +65,18 @@ class PaymentControllerWebFluxTest {
 				.jsonPath("$.balance").isEqualTo(7500)
 				.jsonPath("$.message").doesNotExist();
 
-		verify(paymentService).pay(2500L);
+		verify(paymentService).pay(USERNAME, 2500L);
 	}
 
 	@Test
 	void shouldRejectPaymentWhenBalanceIsNotEnough() {
-		when(paymentService.pay(2500L))
+		when(paymentService.pay(USERNAME, 2500L))
 				.thenReturn(Mono.just(PaymentService.PaymentResult.failed(1000L, "Недостаточно средств")));
 
 		webTestClient.mutateWith(mockJwt())
 				.post()
 				.uri("/payments/pay")
+				.header(PaymentController.USERNAME_HEADER, USERNAME)
 				.contentType(MediaType.APPLICATION_JSON)
 				.bodyValue(Map.of("amount", 2500))
 				.exchange()
@@ -82,7 +87,7 @@ class PaymentControllerWebFluxTest {
 				.jsonPath("$.balance").isEqualTo(1000)
 				.jsonPath("$.message").isEqualTo("Недостаточно средств");
 
-		verify(paymentService).pay(2500L);
+		verify(paymentService).pay(USERNAME, 2500L);
 	}
 
 	@Test
@@ -101,5 +106,25 @@ class PaymentControllerWebFluxTest {
 				.bodyValue(Map.of("amount", 2500))
 				.exchange()
 				.expectStatus().isUnauthorized();
+	}
+
+	@Test
+	void shouldRejectBalanceWithoutUsername() {
+		webTestClient.mutateWith(mockJwt())
+				.get()
+				.uri("/payments/balance")
+				.exchange()
+				.expectStatus().isBadRequest();
+	}
+
+	@Test
+	void shouldRejectPaymentWithoutUsername() {
+		webTestClient.mutateWith(mockJwt())
+				.post()
+				.uri("/payments/pay")
+				.contentType(MediaType.APPLICATION_JSON)
+				.bodyValue(Map.of("amount", 2500))
+				.exchange()
+				.expectStatus().isBadRequest();
 	}
 }

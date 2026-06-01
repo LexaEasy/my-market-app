@@ -6,3 +6,9 @@ MERGE INTO items (id, title, description, img_path, price) KEY (id) VALUES
     (5, 'Настольная лампа', 'Лампа с регулируемым углом наклона.', 'images/lamp.svg', 2190);
 
 ALTER TABLE items ALTER COLUMN id RESTART WITH 6;
+
+MERGE INTO users (id, username, enabled) KEY (id) VALUES
+    (1, 'user', TRUE),
+    (2, 'buyer', TRUE);
+
+ALTER TABLE users ALTER COLUMN id RESTART WITH 3;

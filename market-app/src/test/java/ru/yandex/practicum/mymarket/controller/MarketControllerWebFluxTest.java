@@ -3,11 +3,14 @@ package ru.yandex.practicum.mymarket.controller;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import ru.yandex.practicum.mymarket.config.SecurityConfig;
 import ru.yandex.practicum.mymarket.dto.CartPage;
 import ru.yandex.practicum.mymarket.dto.CheckoutResult;
 import ru.yandex.practicum.mymarket.dto.CatalogPage;
@@ -30,6 +33,7 @@ import static org.mockito.Mockito.when;
         CartController.class,
         OrderController.class
 })
+@Import(SecurityConfig.class)
 class MarketControllerWebFluxTest {
 
     @Autowired
@@ -101,6 +105,7 @@ class MarketControllerWebFluxTest {
     }
 
     @Test
+    @WithMockUser(username = "jane")
     void shouldUpdateCatalogItemAndRedirectBackToCatalog() {
         when(cartService.updateItemCount(1, CartAction.PLUS)).thenReturn(Mono.empty());
 
@@ -122,6 +127,7 @@ class MarketControllerWebFluxTest {
     }
 
     @Test
+    @WithMockUser(username = "jane")
     void shouldUpdateItemAndRenderItemPage() {
         ItemDto item = new ItemDto(1, "Товар", "Описание", "images/item.jpg", 100, 1);
         when(cartService.updateItemCount(1, CartAction.PLUS)).thenReturn(Mono.empty());
@@ -141,6 +147,7 @@ class MarketControllerWebFluxTest {
     }
 
     @Test
+    @WithMockUser(username = "jane")
     void shouldRenderCartPage() {
         CartPage cartPage = new CartPage(
                 List.of(new ItemDto(1, "Товар", "Описание", "images/item.jpg", 100, 2)),
@@ -164,6 +171,16 @@ class MarketControllerWebFluxTest {
     }
 
     @Test
+    void shouldRedirectAnonymousUserToKeycloakForCartPage() {
+        webTestClient.get()
+                .uri("/cart/items")
+                .exchange()
+                .expectStatus().is3xxRedirection()
+                .expectHeader().valueEquals("Location", "/oauth2/authorization/keycloak");
+    }
+
+    @Test
+    @WithMockUser(username = "jane")
     void shouldUpdateCartItemAndRenderCartPage() {
         CartPage cartPage = new CartPage(List.of(), 0);
         when(cartService.updateItemCount(1, CartAction.DELETE)).thenReturn(Mono.empty());
@@ -182,6 +199,7 @@ class MarketControllerWebFluxTest {
     }
 
     @Test
+    @WithMockUser(username = "jane")
     void shouldBuyCartAndRedirectToNewOrder() {
         when(orderService.buy()).thenReturn(Mono.just(CheckoutResult.paid(10L)));
 
@@ -195,6 +213,7 @@ class MarketControllerWebFluxTest {
     }
 
     @Test
+    @WithMockUser(username = "jane")
     void shouldRedirectToCartWhenCartIsEmpty() {
         when(orderService.buy()).thenReturn(Mono.just(CheckoutResult.empty()));
 
@@ -208,6 +227,7 @@ class MarketControllerWebFluxTest {
     }
 
     @Test
+    @WithMockUser(username = "jane")
     void shouldRedirectToCartWhenPaymentIsRejected() {
         when(orderService.buy()).thenReturn(Mono.just(CheckoutResult.rejected("Недостаточно средств")));
 
@@ -221,6 +241,7 @@ class MarketControllerWebFluxTest {
     }
 
     @Test
+    @WithMockUser(username = "jane")
     void shouldRenderOrdersPage() {
         List<OrderDto> orders = List.of(new OrderDto(
                 10,
@@ -241,6 +262,7 @@ class MarketControllerWebFluxTest {
     }
 
     @Test
+    @WithMockUser(username = "jane")
     void shouldRenderOrderPage() {
         OrderDto order = new OrderDto(
                 10,
@@ -262,6 +284,7 @@ class MarketControllerWebFluxTest {
     }
 
     @Test
+    @WithMockUser(username = "jane")
     void shouldReturnNotFoundWhenOrderDoesNotExist() {
         when(orderService.findById(404)).thenReturn(Mono.empty());
 

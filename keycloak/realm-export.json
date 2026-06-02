@@ -5,6 +5,9 @@
     {
       "username": "user",
       "enabled": true,
+      "email": "user@example.local",
+      "firstName": "User",
+      "lastName": "Market",
       "emailVerified": true,
       "credentials": [
         {
@@ -17,6 +20,9 @@
     {
       "username": "buyer",
       "enabled": true,
+      "email": "buyer@example.local",
+      "firstName": "Buyer",
+      "lastName": "Market",
       "emailVerified": true,
       "credentials": [
         {

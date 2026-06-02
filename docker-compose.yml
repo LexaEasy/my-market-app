@@ -9,7 +9,7 @@ services:
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1"]
+      test: ["CMD-SHELL", "timeout 3 bash -c '</dev/tcp/localhost/8080' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -65,6 +65,5 @@ services:
       KEYCLOAK_AUTHORIZATION_URI: http://localhost:8082/realms/my-market/protocol/openid-connect/auth
       KEYCLOAK_TOKEN_URI: http://keycloak:8080/realms/my-market/protocol/openid-connect/token
       KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/my-market/protocol/openid-connect/certs
-      KEYCLOAK_USER_INFO_URI: http://keycloak:8080/realms/my-market/protocol/openid-connect/userinfo
     ports:
       - "8080:8080"

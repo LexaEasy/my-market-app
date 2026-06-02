@@ -40,7 +40,8 @@ my-market-app/
 - `PAYMENT_SERVICE_CLIENT_SECRET` - dev-секрет клиента платежей.
 - `KEYCLOAK_LOGIN_CLIENT_ID` - OAuth2 client id для browser login, по умолчанию `market-app-login`.
 - `KEYCLOAK_LOGIN_CLIENT_SECRET` - dev-секрет клиента browser login.
-- `KEYCLOAK_AUTHORIZATION_URI`, `KEYCLOAK_TOKEN_URI`, `KEYCLOAK_JWK_SET_URI`, `KEYCLOAK_USER_INFO_URI` - endpoints Keycloak.
+- `KEYCLOAK_AUTHORIZATION_URI`, `KEYCLOAK_TOKEN_URI`, `KEYCLOAK_JWK_SET_URI` - endpoints Keycloak для OAuth2 login и client credentials flow.
+- `KEYCLOAK_LOGOUT_URI` - endpoint Keycloak для OIDC logout, по умолчанию `http://localhost:8082/realms/my-market/protocol/openid-connect/logout`.
 
 Основные настройки `payment-service`:
 

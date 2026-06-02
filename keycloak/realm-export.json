@@ -55,6 +55,9 @@
       "serviceAccountsEnabled": false,
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:8080/"
+      },
       "redirectUris": [
         "http://localhost:8080/login/oauth2/code/keycloak"
       ],

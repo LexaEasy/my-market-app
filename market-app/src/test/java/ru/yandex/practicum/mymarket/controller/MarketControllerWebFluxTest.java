@@ -25,6 +25,7 @@ import ru.yandex.practicum.mymarket.service.OrderService;
 import java.util.List;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -178,7 +179,32 @@ class MarketControllerWebFluxTest {
                 .expectStatus().isOk()
                 .expectBody(String.class)
                 .value(containsString("Товар"))
-                .value(containsString("Итого: 200 руб."));
+                .value(containsString("Итого: 200 руб."))
+                .value(containsString("Выйти"))
+                .value(not(containsString("Заказ не оформлен: платёж не выполнен.")));
+
+        verify(cartService).findCart("jane");
+    }
+
+    @Test
+    @WithMockUser(username = "jane")
+    void shouldRenderPaymentErrorOnlyWhenPaymentErrorParamIsPresent() {
+        CartPage cartPage = new CartPage(
+                List.of(new ItemDto(1, "Товар", "Описание", "images/item.jpg", 100, 2)),
+                200,
+                true,
+                1000,
+                true,
+                null
+        );
+        when(cartService.findCart("jane")).thenReturn(Mono.just(cartPage));
+
+        webTestClient.get()
+                .uri("/cart/items?paymentError=true")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class)
+                .value(containsString("Заказ не оформлен: платёж не выполнен."));
 
         verify(cartService).findCart("jane");
     }

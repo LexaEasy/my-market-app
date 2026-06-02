@@ -19,6 +19,9 @@
                     <a th:href="@{/orders}" class="btn btn-secondary ms-auto bi bi-file-earmark-text"> Заказы</a>
                     <a th:href="@{/cart/items}" class="btn btn-secondary bi bi-cart4"> Корзина</a>
                     <a th:href="@{/items}" class="btn btn-secondary bi bi-arrow-left-square"> Главная</a>
+                    <form th:action="@{/logout}" method="post">
+                        <button type="submit" class="btn btn-outline-danger bi bi-box-arrow-right"> Выйти</button>
+                    </form>
                 </div>
             </div>
         </div>

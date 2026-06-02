@@ -5,6 +5,7 @@ import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.dto.CartPage;
 import ru.yandex.practicum.mymarket.dto.CartItemForm;
@@ -22,12 +23,18 @@ public class CartController {
     }
 
     @GetMapping("/cart/items")
-    public Mono<String> getCart(Principal principal, Model model) {
+    public Mono<String> getCart(
+            @RequestParam(defaultValue = "false") boolean paymentError,
+            Principal principal,
+            Model model
+    ) {
+        model.addAttribute("paymentError", paymentError);
         return fillModel(principal, model).thenReturn("cart");
     }
 
     @PostMapping("/cart/items")
     public Mono<String> updateCartItem(@ModelAttribute CartItemForm form, Principal principal, Model model) {
+        model.addAttribute("paymentError", false);
         return cartService.updateItemCount(username(principal), form.getId(), form.getAction())
                 .then(fillModel(principal, model))
                 .thenReturn("cart");

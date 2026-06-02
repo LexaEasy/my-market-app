@@ -1,4 +1,22 @@
 services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    command: start-dev --import-realm
+    environment:
+      KC_HEALTH_ENABLED: "true"
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    ports:
+      - "8082:8080"
+
   redis:
     image: redis:7-alpine
     healthcheck:
@@ -13,12 +31,11 @@ services:
     build:
       context: .
       dockerfile: payment-service/Dockerfile
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8081/payments/balance || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 10s
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/my-market
     ports:
       - "8081:8081"
 
@@ -30,6 +47,8 @@ services:
       redis:
         condition: service_healthy
       payment-service:
+        condition: service_started
+      keycloak:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/ || exit 1"]
@@ -41,5 +60,11 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       APP_PAYMENT_SERVICE_BASE_URL: http://payment-service:8081
+      PAYMENT_SERVICE_CLIENT_SECRET: dev-payment-secret
+      KEYCLOAK_LOGIN_CLIENT_SECRET: dev-login-secret
+      KEYCLOAK_AUTHORIZATION_URI: http://localhost:8082/realms/my-market/protocol/openid-connect/auth
+      KEYCLOAK_TOKEN_URI: http://keycloak:8080/realms/my-market/protocol/openid-connect/token
+      KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/my-market/protocol/openid-connect/certs
+      KEYCLOAK_USER_INFO_URI: http://keycloak:8080/realms/my-market/protocol/openid-connect/userinfo
     ports:
       - "8080:8080"

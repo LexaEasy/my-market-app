@@ -2,13 +2,14 @@ package ru.yandex.practicum.mymarket.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.oauth2.client.ClientAuthorizationException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
 import ru.yandex.practicum.mymarket.dto.OrderPaymentResult;
 import ru.yandex.practicum.mymarket.dto.PaymentAvailability;
-import ru.yandex.practicum.mymarket.payment.client.api.PaymentsApi;
+import ru.yandex.practicum.mymarket.payment.PaymentGatewayClient;
 import ru.yandex.practicum.mymarket.payment.client.model.PaymentRequest;
 import ru.yandex.practicum.mymarket.payment.client.model.PaymentResponse;
 
@@ -18,27 +19,33 @@ public class PaymentClientService {
     private static final String PAYMENT_SERVICE_UNAVAILABLE = "Сервис платежей недоступен";
     private static final String PAYMENT_REJECTED = "Платёж не выполнен";
 
-    private final PaymentsApi paymentsApi;
+    private final PaymentGatewayClient paymentGatewayClient;
     private final ObjectMapper objectMapper;
 
-    public PaymentClientService(PaymentsApi paymentsApi, ObjectMapper objectMapper) {
-        this.paymentsApi = paymentsApi;
+    public PaymentClientService(PaymentGatewayClient paymentGatewayClient, ObjectMapper objectMapper) {
+        this.paymentGatewayClient = paymentGatewayClient;
         this.objectMapper = objectMapper;
     }
 
-    public Mono<PaymentAvailability> getBalance() {
-        return paymentsApi.getBalance()
+    public Mono<PaymentAvailability> getBalance(String username) {
+        return paymentGatewayClient.getBalance(username)
                 .map(response -> PaymentAvailability.available(response.getBalance()))
+                .onErrorResume(ClientAuthorizationException.class, this::handleBalanceAuthorizationError)
                 .onErrorResume(WebClientResponseException.class, this::handleBalanceResponseError)
                 .onErrorResume(WebClientRequestException.class, this::handleBalanceRequestError);
     }
 
-    public Mono<OrderPaymentResult> pay(long amount) {
+    public Mono<OrderPaymentResult> pay(String username, long amount) {
         PaymentRequest request = new PaymentRequest().amount(amount);
-        return paymentsApi.pay(request)
+        return paymentGatewayClient.pay(username, request)
                 .map(this::toPaymentResult)
+                .onErrorResume(ClientAuthorizationException.class, this::handlePaymentAuthorizationError)
                 .onErrorResume(WebClientResponseException.class, this::handlePaymentError)
                 .onErrorResume(WebClientRequestException.class, this::handlePaymentRequestError);
+    }
+
+    private Mono<PaymentAvailability> handleBalanceAuthorizationError(ClientAuthorizationException error) {
+        return Mono.just(PaymentAvailability.unavailable(PAYMENT_SERVICE_UNAVAILABLE));
     }
 
     private Mono<PaymentAvailability> handleBalanceRequestError(WebClientRequestException error) {
@@ -50,6 +57,10 @@ public class PaymentClientService {
     }
 
     private Mono<OrderPaymentResult> handlePaymentRequestError(WebClientRequestException error) {
+        return Mono.just(OrderPaymentResult.unavailable(PAYMENT_SERVICE_UNAVAILABLE));
+    }
+
+    private Mono<OrderPaymentResult> handlePaymentAuthorizationError(ClientAuthorizationException error) {
         return Mono.just(OrderPaymentResult.unavailable(PAYMENT_SERVICE_UNAVAILABLE));
     }
 

@@ -9,9 +9,9 @@ import java.util.Collection;
 
 public interface CartItemRepository extends ReactiveCrudRepository<CartItem, Long> {
 
-    Mono<CartItem> findByItemId(long itemId);
+    Mono<CartItem> findByUserIdAndItemId(long userId, long itemId);
 
-    Flux<CartItem> findAllByItemIdIn(Collection<Long> itemIds);
+    Flux<CartItem> findAllByUserIdAndItemIdIn(long userId, Collection<Long> itemIds);
 
-    Flux<CartItem> findAllByOrderByItemIdAsc();
+    Flux<CartItem> findAllByUserIdOrderByItemIdAsc(long userId);
 }

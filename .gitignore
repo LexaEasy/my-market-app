@@ -1,6 +1,9 @@
 HELP.md
 target/
 docs/
+*.md
+!README.md
+!ARCHITECTURE.md
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/

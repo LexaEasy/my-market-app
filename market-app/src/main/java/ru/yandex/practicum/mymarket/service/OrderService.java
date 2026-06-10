@@ -22,6 +22,7 @@ import java.util.List;
 public class OrderService {
 
     private final CartItemRepository cartItemRepository;
+    private final AppUserService appUserService;
     private final ItemRepository itemRepository;
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
@@ -29,12 +30,14 @@ public class OrderService {
 
     public OrderService(
             CartItemRepository cartItemRepository,
+            AppUserService appUserService,
             ItemRepository itemRepository,
             OrderRepository orderRepository,
             OrderItemRepository orderItemRepository,
             PaymentClientService paymentClientService
     ) {
         this.cartItemRepository = cartItemRepository;
+        this.appUserService = appUserService;
         this.itemRepository = itemRepository;
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
@@ -42,36 +45,39 @@ public class OrderService {
     }
 
     @Transactional
-    public Mono<CheckoutResult> buy() {
-        return cartItemRepository.findAllByOrderByItemIdAsc()
-                .collectList()
-                .flatMap(cartItems -> {
-                    if (cartItems.isEmpty()) {
-                        return Mono.just(CheckoutResult.empty());
-                    }
-                    return calculateTotal(cartItems)
-                            .flatMap(total -> paymentClientService.pay(total))
-                            .flatMap(payment -> finishCheckout(cartItems, payment));
-                });
+    public Mono<CheckoutResult> buy(String username) {
+        return findUserId(username)
+                .flatMap(userId -> cartItemRepository.findAllByUserIdOrderByItemIdAsc(userId)
+                        .collectList()
+                        .flatMap(cartItems -> {
+                            if (cartItems.isEmpty()) {
+                                return Mono.just(CheckoutResult.empty());
+                            }
+                            return calculateTotal(cartItems)
+                                    .flatMap(total -> paymentClientService.pay(username, total))
+                                    .flatMap(payment -> finishCheckout(userId, cartItems, payment));
+                        }));
     }
 
     @Transactional(readOnly = true)
-    public Mono<OrderDto> findById(long id) {
-        return orderRepository.findById(id)
+    public Mono<OrderDto> findById(String username, long id) {
+        return findUserId(username)
+                .flatMap(userId -> orderRepository.findByIdAndUserId(id, userId))
                 .flatMap(this::toDto);
     }
 
     @Transactional(readOnly = true)
-    public Flux<OrderDto> findAll() {
-        return orderRepository.findAllByOrderByIdAsc()
+    public Flux<OrderDto> findAll(String username) {
+        return findUserId(username)
+                .flatMapMany(userId -> orderRepository.findAllByUserIdOrderByIdAsc(userId))
                 .flatMap(this::toDto);
     }
 
-    private Mono<CheckoutResult> finishCheckout(List<CartItem> cartItems, OrderPaymentResult payment) {
+    private Mono<CheckoutResult> finishCheckout(long userId, List<CartItem> cartItems, OrderPaymentResult payment) {
         if (!payment.success()) {
             return Mono.just(CheckoutResult.rejected(payment.message()));
         }
-        return saveOrder(cartItems).map(CheckoutResult::paid);
+        return saveOrder(userId, cartItems).map(CheckoutResult::paid);
     }
 
     private Mono<Long> calculateTotal(List<CartItem> cartItems) {
@@ -81,12 +87,18 @@ public class OrderService {
                 .reduce(0L, Long::sum);
     }
 
-    private Mono<Long> saveOrder(List<CartItem> cartItems) {
-        return orderRepository.save(Order.create())
+    private Mono<Long> saveOrder(long userId, List<CartItem> cartItems) {
+        return orderRepository.save(Order.create(userId))
                 .flatMap(savedOrder -> createOrderItems(savedOrder.getId(), cartItems)
                         .as(orderItemRepository::saveAll)
                         .then(cartItemRepository.deleteAll(cartItems))
                         .thenReturn(savedOrder.getId()));
+    }
+
+    private Mono<Long> findUserId(String username) {
+        return appUserService.findOrCreateByUsername(username)
+                .filter(user -> user.isEnabled())
+                .map(user -> user.getId());
     }
 
     private Flux<OrderItem> createOrderItems(long orderId, List<CartItem> cartItems) {

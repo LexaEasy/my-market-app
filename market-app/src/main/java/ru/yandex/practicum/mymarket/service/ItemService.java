@@ -29,15 +29,18 @@ public class ItemService {
 
     private final ItemRepository itemRepository;
     private final CartItemRepository cartItemRepository;
+    private final AppUserService appUserService;
     private final ItemCacheService itemCacheService;
 
     public ItemService(
             ItemRepository itemRepository,
             CartItemRepository cartItemRepository,
+            AppUserService appUserService,
             ItemCacheService itemCacheService
     ) {
         this.itemRepository = itemRepository;
         this.cartItemRepository = cartItemRepository;
+        this.appUserService = appUserService;
         this.itemCacheService = itemCacheService;
     }
 
@@ -47,13 +50,19 @@ public class ItemService {
     }
 
     @Transactional(readOnly = true)
-    public Mono<ItemDto> findById(long id) {
+    public Mono<ItemDto> findById(long id, String username) {
         return itemCacheService.findById(id, itemRepository.findById(id))
-                .flatMap(item -> findCount(item.getId()).map(count -> toDto(item, count)));
+                .flatMap(item -> findCount(username, item.getId()).map(count -> toDto(item, count)));
     }
 
     @Transactional(readOnly = true)
-    public Mono<CatalogPage> findCatalog(String search, String sort, Integer pageNumber, Integer pageSize) {
+    public Mono<CatalogPage> findCatalog(
+            String username,
+            String search,
+            String sort,
+            Integer pageNumber,
+            Integer pageSize
+    ) {
         String normalizedSearch = normalizeSearch(search);
         ItemSort itemSort = ItemSort.from(sort);
         int normalizedPageNumber = normalizePageNumber(pageNumber);
@@ -64,6 +73,7 @@ public class ItemService {
                 .sort(resolveComparator(itemSort))
                 .collectList()
                 .flatMap(items -> buildCatalogPage(
+                        username,
                         items,
                         normalizedSearch,
                         itemSort,
@@ -73,6 +83,7 @@ public class ItemService {
     }
 
     private Mono<CatalogPage> buildCatalogPage(
+            String username,
             List<Item> allItems,
             String search,
             ItemSort sort,
@@ -85,7 +96,7 @@ public class ItemService {
         boolean hasPrevious = pageNumber > 1;
         boolean hasNext = toIndex < allItems.size();
 
-        return findCounts(pageItems)
+        return findCounts(username, pageItems)
                 .map(counts -> new CatalogPage(
                         toRows(pageItems, counts),
                         search,
@@ -146,22 +157,34 @@ public class ItemService {
         return rows;
     }
 
-    private Mono<Map<Long, Integer>> findCounts(List<Item> items) {
+    private Mono<Map<Long, Integer>> findCounts(String username, List<Item> items) {
         List<Long> itemIds = items.stream()
                 .map(Item::getId)
                 .toList();
-        if (itemIds.isEmpty()) {
+        if (itemIds.isEmpty() || username == null || username.isBlank()) {
             return Mono.just(Map.of());
         }
 
-        return cartItemRepository.findAllByItemIdIn(itemIds)
+        return findUserId(username)
+                .flatMapMany(userId -> cartItemRepository.findAllByUserIdAndItemIdIn(userId, itemIds))
                 .collect(Collectors.toMap(CartItem::getItemId, CartItem::getQuantity));
     }
 
-    private Mono<Integer> findCount(long itemId) {
-        return cartItemRepository.findByItemId(itemId)
-                .map(cartItem -> cartItem.getQuantity())
+    private Mono<Integer> findCount(String username, long itemId) {
+        if (username == null || username.isBlank()) {
+            return Mono.just(0);
+        }
+        return findUserId(username)
+                .flatMap(userId -> cartItemRepository.findByUserIdAndItemId(userId, itemId))
+                .map(CartItem::getQuantity)
                 .defaultIfEmpty(0);
+    }
+
+    private Mono<Long> findUserId(String username) {
+        return appUserService.findOrCreateByUsername(username)
+                .filter(user -> user.isEnabled())
+                .map(user -> user.getId())
+                .defaultIfEmpty(-1L);
     }
 
     private ItemDto toDto(Item item, int count) {

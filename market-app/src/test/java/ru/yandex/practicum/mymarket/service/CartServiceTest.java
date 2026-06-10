@@ -18,8 +18,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 @DataR2dbcTest
-@Import(CartService.class)
+@Import({AppUserService.class, CartService.class})
 class CartServiceTest {
+
+    private static final String USERNAME = "user";
+    private static final String OTHER_USERNAME = "buyer";
 
     @Autowired
     private CartService cartService;
@@ -42,9 +45,9 @@ class CartServiceTest {
     @Test
     void shouldIncreaseItemCount() {
         StepVerifier.create(findSeededItem()
-                        .flatMap(item -> cartService.updateItemCount(item.getId(), CartAction.PLUS)
-                                .then(cartService.updateItemCount(item.getId(), CartAction.PLUS))
-                                .then(cartItemRepository.findByItemId(item.getId()))))
+                        .flatMap(item -> cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS)
+                                .then(cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS))
+                                .then(cartItemRepository.findByUserIdAndItemId(1L, item.getId()))))
                 .assertNext(cartItem -> assertThat(cartItem.getQuantity()).isEqualTo(2))
                 .verifyComplete();
     }
@@ -52,20 +55,20 @@ class CartServiceTest {
     @Test
     void shouldRemoveCartItemWhenCountBecomesZero() {
         StepVerifier.create(findSeededItem()
-                        .flatMap(item -> cartService.updateItemCount(item.getId(), CartAction.PLUS)
-                                .then(cartService.updateItemCount(item.getId(), CartAction.MINUS))
-                                .then(cartItemRepository.findByItemId(item.getId()))))
+                        .flatMap(item -> cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS)
+                                .then(cartService.updateItemCount(USERNAME, item.getId(), CartAction.MINUS))
+                                .then(cartItemRepository.findByUserIdAndItemId(1L, item.getId()))))
                 .verifyComplete();
     }
 
     @Test
     void shouldReturnCartPageWithTotal() {
-        when(paymentClientService.getBalance()).thenReturn(Mono.just(PaymentAvailability.available(10000L)));
+        when(paymentClientService.getBalance(USERNAME)).thenReturn(Mono.just(PaymentAvailability.available(10000L)));
 
         StepVerifier.create(findSeededItem()
-                        .flatMap(item -> cartService.updateItemCount(item.getId(), CartAction.PLUS)
-                                .then(cartService.updateItemCount(item.getId(), CartAction.PLUS))
-                                .then(cartService.findCart())))
+                        .flatMap(item -> cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS)
+                                .then(cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS))
+                                .then(cartService.findCart(USERNAME))))
                 .assertNext(cartPage -> {
                     assertThat(cartPage.total()).isEqualTo(2980);
                     assertThat(cartPage.purchaseAvailable()).isTrue();
@@ -82,14 +85,29 @@ class CartServiceTest {
 
     @Test
     void shouldDisablePurchaseWhenBalanceIsNotEnough() {
-        when(paymentClientService.getBalance()).thenReturn(Mono.just(PaymentAvailability.available(1000L)));
+        when(paymentClientService.getBalance(USERNAME)).thenReturn(Mono.just(PaymentAvailability.available(1000L)));
 
         StepVerifier.create(findSeededItem()
-                        .flatMap(item -> cartService.updateItemCount(item.getId(), CartAction.PLUS)
-                                .then(cartService.findCart())))
+                        .flatMap(item -> cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS)
+                                .then(cartService.findCart(USERNAME))))
                 .assertNext(cartPage -> {
                     assertThat(cartPage.purchaseAvailable()).isFalse();
                     assertThat(cartPage.paymentMessage()).isEqualTo("Недостаточно средств для оформления заказа");
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void shouldKeepCartItemsSeparatedByUser() {
+        StepVerifier.create(findSeededItem()
+                        .flatMap(item -> cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS)
+                                .then(cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS))
+                                .then(cartService.updateItemCount(OTHER_USERNAME, item.getId(), CartAction.PLUS))
+                                .then(cartItemRepository.findByUserIdAndItemId(1L, item.getId())
+                                        .zipWith(cartItemRepository.findByUserIdAndItemId(2L, item.getId())))))
+                .assertNext(items -> {
+                    assertThat(items.getT1().getQuantity()).isEqualTo(2);
+                    assertThat(items.getT2().getQuantity()).isEqualTo(1);
                 })
                 .verifyComplete();
     }

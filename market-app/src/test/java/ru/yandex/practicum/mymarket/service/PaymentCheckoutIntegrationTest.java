@@ -27,18 +27,35 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest
 class PaymentCheckoutIntegrationTest {
 
+    private static final String USERNAME = "user";
+
     private static final AtomicReference<PaymentScenario> paymentScenario = new AtomicReference<>();
     private static final AtomicInteger payRequests = new AtomicInteger();
+    private static final AtomicReference<String> lastBalanceAuthorization = new AtomicReference<>();
+    private static final AtomicReference<String> lastPayAuthorization = new AtomicReference<>();
+    private static final AtomicReference<String> lastBalanceUsername = new AtomicReference<>();
+    private static final AtomicReference<String> lastPayUsername = new AtomicReference<>();
     private static final AtomicReference<String> lastPayRequest = new AtomicReference<>();
     private static final DisposableServer paymentServer = HttpServer.create()
             .host("localhost")
             .port(0)
             .route(routes -> routes
-                    .get("/payments/balance", (request, response) -> handleBalance(response))
+                    .post("/oauth/token", (request, response) -> handleToken(response))
+                    .get("/payments/balance", (request, response) ->
+                            handleBalance(
+                                    request.requestHeaders().get("Authorization"),
+                                    request.requestHeaders().get("X-User-Name"),
+                                    response
+                            ))
                     .post("/payments/pay", (request, response) -> request.receive()
                             .aggregate()
                             .asString()
-                            .flatMap(body -> handlePay(response, body))))
+                            .flatMap(body -> handlePay(
+                                    request.requestHeaders().get("Authorization"),
+                                    request.requestHeaders().get("X-User-Name"),
+                                    response,
+                                    body
+                            ))))
             .bindNow();
 
     @Autowired
@@ -62,6 +79,17 @@ class PaymentCheckoutIntegrationTest {
     @DynamicPropertySource
     static void paymentProperties(DynamicPropertyRegistry registry) {
         registry.add("app.payment-service.base-url", () -> "http://localhost:" + paymentServer.port());
+        registry.add("spring.security.oauth2.client.registration.payment-service.provider", () -> "test-oauth");
+        registry.add("spring.security.oauth2.client.registration.payment-service.client-id", () -> "market-app");
+        registry.add("spring.security.oauth2.client.registration.payment-service.client-secret", () -> "test-secret");
+        registry.add(
+                "spring.security.oauth2.client.registration.payment-service.authorization-grant-type",
+                () -> "client_credentials"
+        );
+        registry.add(
+                "spring.security.oauth2.client.provider.test-oauth.token-uri",
+                () -> "http://localhost:" + paymentServer.port() + "/oauth/token"
+        );
     }
 
     @AfterAll
@@ -73,6 +101,10 @@ class PaymentCheckoutIntegrationTest {
     void setUp() {
         paymentScenario.set(PaymentScenario.success());
         payRequests.set(0);
+        lastBalanceAuthorization.set(null);
+        lastPayAuthorization.set(null);
+        lastBalanceUsername.set(null);
+        lastPayUsername.set(null);
         lastPayRequest.set(null);
         StepVerifier.create(orderItemRepository.deleteAll()
                         .then(orderRepository.deleteAll())
@@ -83,7 +115,7 @@ class PaymentCheckoutIntegrationTest {
     @Test
     void shouldCreateOrderAfterSuccessfulPayment() {
         StepVerifier.create(addSeededItemToCart()
-                        .then(orderService.buy())
+                        .then(orderService.buy(USERNAME))
                         .flatMap(result -> Mono.zip(
                                 Mono.just(result),
                                 orderRepository.findById(result.orderId()),
@@ -94,6 +126,8 @@ class PaymentCheckoutIntegrationTest {
                     assertThat(result.getT2().getId()).isEqualTo(result.getT1().orderId());
                     assertThat(result.getT3()).isEmpty();
                     assertThat(payRequests).hasValue(1);
+                    assertThat(lastPayAuthorization).hasValue("Bearer test-payment-token");
+                    assertThat(lastPayUsername).hasValue(USERNAME);
                     assertThat(lastPayRequest.get()).contains("\"amount\":1490");
                 })
                 .verifyComplete();
@@ -103,10 +137,12 @@ class PaymentCheckoutIntegrationTest {
     void shouldDisablePurchaseWhenBalanceIsNotEnough() {
         paymentScenario.set(PaymentScenario.notEnoughBalance());
 
-        StepVerifier.create(addSeededItemToCart().then(cartService.findCart()))
+        StepVerifier.create(addSeededItemToCart().then(cartService.findCart(USERNAME)))
                 .assertNext(cartPage -> {
                     assertThat(cartPage.paymentAvailable()).isTrue();
                     assertThat(cartPage.purchaseAvailable()).isFalse();
+                    assertThat(lastBalanceAuthorization).hasValue("Bearer test-payment-token");
+                    assertThat(lastBalanceUsername).hasValue(USERNAME);
                     assertThat(cartPage.paymentMessage()).isEqualTo("Недостаточно средств для оформления заказа");
                 })
                 .verifyComplete();
@@ -117,7 +153,7 @@ class PaymentCheckoutIntegrationTest {
         paymentScenario.set(PaymentScenario.rejected());
 
         StepVerifier.create(addSeededItemToCart()
-                        .then(orderService.buy())
+                        .then(orderService.buy(USERNAME))
                         .flatMap(result -> orderRepository.findAll()
                                 .collectList()
                                 .map(orders -> new RejectedCheckout(result.success(), result.message(), orders.size()))))
@@ -133,7 +169,7 @@ class PaymentCheckoutIntegrationTest {
     void shouldDisablePurchaseWhenPaymentServiceIsUnavailable() {
         paymentScenario.set(PaymentScenario.serviceUnavailable());
 
-        StepVerifier.create(addSeededItemToCart().then(cartService.findCart()))
+        StepVerifier.create(addSeededItemToCart().then(cartService.findCart(USERNAME)))
                 .assertNext(cartPage -> {
                     assertThat(cartPage.paymentAvailable()).isFalse();
                     assertThat(cartPage.purchaseAvailable()).isFalse();
@@ -144,10 +180,20 @@ class PaymentCheckoutIntegrationTest {
 
     private Mono<Void> addSeededItemToCart() {
         return itemRepository.findById(1L)
-                .flatMap(item -> cartService.updateItemCount(item.getId(), CartAction.PLUS));
+                .flatMap(item -> cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS));
     }
 
-    private static Mono<Void> handleBalance(HttpServerResponse response) {
+    private static Mono<Void> handleToken(HttpServerResponse response) {
+        return sendJson(
+                response,
+                HttpResponseStatus.OK,
+                "{\"access_token\":\"test-payment-token\",\"token_type\":\"Bearer\",\"expires_in\":300}"
+        );
+    }
+
+    private static Mono<Void> handleBalance(String authorization, String username, HttpServerResponse response) {
+        lastBalanceAuthorization.set(authorization);
+        lastBalanceUsername.set(username);
         PaymentScenario scenario = paymentScenario.get();
         if (scenario.unavailable()) {
             return sendJson(response, HttpResponseStatus.SERVICE_UNAVAILABLE, "{\"message\":\"Service unavailable\"}");
@@ -155,8 +201,10 @@ class PaymentCheckoutIntegrationTest {
         return sendJson(response, HttpResponseStatus.OK, "{\"balance\":" + scenario.balance() + "}");
     }
 
-    private static Mono<Void> handlePay(HttpServerResponse response, String body) {
+    private static Mono<Void> handlePay(String authorization, String username, HttpServerResponse response, String body) {
         payRequests.incrementAndGet();
+        lastPayAuthorization.set(authorization);
+        lastPayUsername.set(username);
         lastPayRequest.set(body);
         PaymentScenario scenario = paymentScenario.get();
         return sendJson(response, scenario.payStatus(), scenario.payBody());

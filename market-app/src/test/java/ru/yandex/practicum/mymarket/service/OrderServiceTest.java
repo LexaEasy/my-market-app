@@ -22,8 +22,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @DataR2dbcTest
-@Import({CartService.class, OrderService.class})
+@Import({AppUserService.class, CartService.class, OrderService.class})
 class OrderServiceTest {
+
+    private static final String USERNAME = "user";
+    private static final String OTHER_USERNAME = "buyer";
 
     @Autowired
     private CartService cartService;
@@ -56,12 +59,12 @@ class OrderServiceTest {
 
     @Test
     void shouldCreateOrderAndClearCart() {
-        when(paymentClientService.pay(2980L)).thenReturn(Mono.just(OrderPaymentResult.success(7020L)));
+        when(paymentClientService.pay(USERNAME, 2980L)).thenReturn(Mono.just(OrderPaymentResult.success(7020L)));
 
         StepVerifier.create(findSeededItem()
-                        .flatMap(item -> cartService.updateItemCount(item.getId(), CartAction.PLUS)
-                                .then(cartService.updateItemCount(item.getId(), CartAction.PLUS))
-                                .then(orderService.buy()))
+                        .flatMap(item -> cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS)
+                                .then(cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS))
+                                .then(orderService.buy(USERNAME)))
                         .flatMap(result -> Mono.zip(
                                 Mono.just(result.orderId()),
                                 cartItemRepository.findAll().collectList(),
@@ -72,6 +75,7 @@ class OrderServiceTest {
                     assertThat(result.getT1()).isPositive();
                     assertThat(result.getT2()).isEmpty();
                     assertThat(result.getT3().getId()).isEqualTo(result.getT1());
+                    assertThat(result.getT3().getUserId()).isEqualTo(1L);
                     assertThat(result.getT4())
                             .singleElement()
                             .satisfies(orderItem -> {
@@ -85,13 +89,13 @@ class OrderServiceTest {
 
     @Test
     void shouldFindOrderDtoById() {
-        when(paymentClientService.pay(2980L)).thenReturn(Mono.just(OrderPaymentResult.success(7020L)));
+        when(paymentClientService.pay(USERNAME, 2980L)).thenReturn(Mono.just(OrderPaymentResult.success(7020L)));
 
         StepVerifier.create(findSeededItem()
-                        .flatMap(item -> cartService.updateItemCount(item.getId(), CartAction.PLUS)
-                                .then(cartService.updateItemCount(item.getId(), CartAction.PLUS))
-                                .then(orderService.buy()))
-                        .flatMap(result -> orderService.findById(result.orderId())))
+                        .flatMap(item -> cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS)
+                                .then(cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS))
+                                .then(orderService.buy(USERNAME)))
+                        .flatMap(result -> orderService.findById(USERNAME, result.orderId())))
                 .assertNext(order -> {
                     assertThat(order.totalSum()).isEqualTo(2980);
                     assertThat(order.items())
@@ -107,12 +111,12 @@ class OrderServiceTest {
 
     @Test
     void shouldFindAllOrders() {
-        when(paymentClientService.pay(1490L)).thenReturn(Mono.just(OrderPaymentResult.success(8510L)));
+        when(paymentClientService.pay(USERNAME, 1490L)).thenReturn(Mono.just(OrderPaymentResult.success(8510L)));
 
         StepVerifier.create(findSeededItem()
-                        .flatMap(item -> cartService.updateItemCount(item.getId(), CartAction.PLUS)
-                                .then(orderService.buy()))
-                        .flatMapMany(result -> orderService.findAll()))
+                        .flatMap(item -> cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS)
+                                .then(orderService.buy(USERNAME)))
+                        .flatMapMany(result -> orderService.findAll(USERNAME)))
                 .assertNext(order -> {
                     assertThat(order.totalSum()).isEqualTo(1490);
                     assertThat(order.items()).hasSize(1);
@@ -122,7 +126,7 @@ class OrderServiceTest {
 
     @Test
     void shouldReturnMinusOneWhenCartIsEmpty() {
-        StepVerifier.create(orderService.buy()
+        StepVerifier.create(orderService.buy(USERNAME)
                         .flatMap(orderId -> orderRepository.findAll()
                                 .collectList()
                                 .map(orders -> new EmptyCartResult(orderId.orderId(), orders.size()))))
@@ -132,17 +136,20 @@ class OrderServiceTest {
                 })
                 .verifyComplete();
 
-        verify(paymentClientService, never()).pay(org.mockito.ArgumentMatchers.anyLong());
+        verify(paymentClientService, never()).pay(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyLong()
+        );
     }
 
     @Test
     void shouldNotCreateOrderWhenPaymentIsRejected() {
-        when(paymentClientService.pay(1490L))
+        when(paymentClientService.pay(USERNAME, 1490L))
                 .thenReturn(Mono.just(OrderPaymentResult.rejected(1000L, "Недостаточно средств")));
 
         StepVerifier.create(findSeededItem()
-                        .flatMap(item -> cartService.updateItemCount(item.getId(), CartAction.PLUS)
-                                .then(orderService.buy()))
+                        .flatMap(item -> cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS)
+                                .then(orderService.buy(USERNAME)))
                         .flatMap(result -> orderRepository.findAll()
                                 .collectList()
                                 .map(orders -> new RejectedPaymentResult(result.success(), result.message(), orders.size()))))
@@ -150,6 +157,28 @@ class OrderServiceTest {
                     assertThat(result.success()).isFalse();
                     assertThat(result.message()).isEqualTo("Недостаточно средств");
                     assertThat(result.orderCount()).isZero();
+                })
+                .verifyComplete();
+    }
+
+    @Test
+    void shouldKeepOrdersSeparatedByUser() {
+        when(paymentClientService.pay(USERNAME, 1490L)).thenReturn(Mono.just(OrderPaymentResult.success(8510L)));
+        when(paymentClientService.pay(OTHER_USERNAME, 1490L)).thenReturn(Mono.just(OrderPaymentResult.success(8510L)));
+
+        StepVerifier.create(findSeededItem()
+                        .flatMap(item -> cartService.updateItemCount(USERNAME, item.getId(), CartAction.PLUS)
+                                .then(orderService.buy(USERNAME))
+                                .flatMap(firstOrder -> cartService.updateItemCount(OTHER_USERNAME, item.getId(), CartAction.PLUS)
+                                        .then(orderService.buy(OTHER_USERNAME))
+                                        .map(secondOrder -> new UserOrders(firstOrder.orderId(), secondOrder.orderId()))))
+                        .flatMap(orders -> orderService.findById(OTHER_USERNAME, orders.firstOrderId())
+                                .hasElement()
+                                .zipWith(orderService.findAll(USERNAME).collectList())
+                                .map(result -> new OrderIsolation(result.getT1(), result.getT2().size()))))
+                .assertNext(result -> {
+                    assertThat(result.otherUserCanReadFirstOrder()).isFalse();
+                    assertThat(result.firstUserOrderCount()).isEqualTo(1);
                 })
                 .verifyComplete();
     }
@@ -162,5 +191,11 @@ class OrderServiceTest {
     }
 
     private record RejectedPaymentResult(boolean success, String message, int orderCount) {
+    }
+
+    private record UserOrders(long firstOrderId, long secondOrderId) {
+    }
+
+    private record OrderIsolation(boolean otherUserCanReadFirstOrder, int firstUserOrderCount) {
     }
 }
